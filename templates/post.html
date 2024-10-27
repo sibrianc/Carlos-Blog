@@ -7,7 +7,14 @@
     <div class="row gx-4 gx-lg-5 justify-content-center">
       <div class="col-md-10 col-lg-8 col-xl-7 text-center">
         <div class="post-heading">
-          <h1>{{ post.title }}</h1>
+          <!-- H1 con múltiples spans para el efecto glitch -->
+          <h1 class="glitch stack" style="--stacks: 5;">
+            <span style="--index:0;">{{ post.title }}</span>
+            <span style="--index:1;">{{ post.title }}</span>
+            <span style="--index:2;">{{ post.title }}</span>
+            <span style="--index:3;">{{ post.title }}</span>
+            <span style="--index:4;">{{ post.title }}</span>
+          </h1>
           <h2 class="subheading">{{ post.subtitle }}</h2>
           <span class="meta">
             Posted by
@@ -39,30 +46,28 @@
 
         <!-- Comments Area -->
         <!-- TODO: Add a CKEditor for commenting below -->
-         {% if current_user.is_authenticated %}
+        {% if current_user.is_authenticated %}
         <div class="comment">
           {% from "bootstrap5/form.html" import render_form %}
           {{ render_form(form, novalidate=True, button_map={"submit": "primary"}) }}
         </div>
         {% endif %}
-          <!-- TODO: Show all the comments on a post -->
+        <!-- Mostrar todos los comentarios de un post -->
         <div class="comments">
           <h3>Comments</h3>
-          {% for comment in comments %}
           <ul class="commentList">
+            {% for comment in comments %}
             <li>
               <div class="commenterImage">
-                <img src="{{ comment.author.email | gravatar }}" />
+                <img src="{{ comment.author.email | gravatar }}" alt="Avatar de {{ comment.author.name }}" />
               </div>
               <div class="commentText">
-
-                <p class="">{{ comment.text }}</p>
+                <p>{{ comment.text }}</p>
                 <span class="date sub-text">{{ comment.author.name }}</span>
-                
               </div>
             </li>
+            {% endfor %}
           </ul>
-          {% endfor %}
         </div>
       </div>
     </div>
