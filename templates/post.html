@@ -7,7 +7,7 @@
     <div class="row gx-4 gx-lg-5 justify-content-center">
       <div class="col-md-10 col-lg-8 col-xl-7 text-center">
         <div class="post-heading">
-          <!-- H1 with multiple spans to apply glitch effect -->
+          <!-- H1 con múltiples spans para el efecto glitch -->
           <h1 class="glitch stack" style="--stacks: 5;">
             <span style="--index:0;">{{ post.title }}</span>
             <span style="--index:1;">{{ post.title }}</span>
@@ -18,7 +18,7 @@
           <h2 class="subheading">{{ post.subtitle }}</h2>
           <span class="meta">
             Posted by
-            <a href="#" class="text-bold"> <strong>{{ post.author.name }}</strong></a>
+            <a href="#" class="text-bold"><strong>{{ post.author.name }}</strong></a>
             on {{ post.date }}
           </span>
         </div>
@@ -33,7 +33,7 @@
     <div class="row gx-4 gx-lg-5 justify-content-center">
       <div class="col-md-10 col-lg-8 col-xl-7">
         {{ post.body|safe }}
-        <!-- Only show Edit Post button if user is admin -->
+        <!-- Solo mostrar botón de editar si el usuario es admin -->
         {% if current_user.is_authenticated and current_user.id == 1 %}
         <div class="d-flex justify-content-end mb-4">
           <a
@@ -44,15 +44,14 @@
         </div>
         {% endif %}
 
-        <!-- Comments Area -->
-        <!-- TODO: Add a CKEditor for commenting below -->
+        <!-- Área de Comentarios -->
         {% if current_user.is_authenticated %}
         <div class="comment">
           {% from "bootstrap5/form.html" import render_form %}
           {{ render_form(form, novalidate=True, button_map={"submit": "primary"}) }}
         </div>
         {% endif %}
-        <!-- Mostrar todos los comentarios de un post -->
+        <!-- Mostrar todos los comentarios de una publicación -->
         <div class="comments">
           <h4 class="glitch stack" style="--stacks: 5;">
             <span style="--index:0;">Comments</span>
