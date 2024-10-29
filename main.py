@@ -168,11 +168,35 @@ def logout():
     return redirect(url_for('get_all_posts'))
 
 
+from datetime import datetime
+from flask import Flask, abort, render_template, redirect, url_for, flash
+# ... otros imports ...
+
 @app.route('/')
 def get_all_posts():
+    # Obtener todas las publicaciones
     result = db.session.execute(db.select(BlogPost))
     posts = result.scalars().all()
-    return render_template("index.html", all_posts=posts, current_user=current_user)
+    
+    # Convertir las fechas de cadena a objetos datetime y agregar a una nueva lista
+    posts_with_datetime = []
+    for post in posts:
+        try:
+            # Asumiendo que el formato es "Month Day, Year", por ejemplo, "October 27, 2023"
+            post_date = datetime.strptime(post.date, "%B %d, %Y")
+        except ValueError:
+            # Manejar formatos de fecha incorrectos
+            post_date = datetime.min  # O una fecha predeterminada
+        posts_with_datetime.append((post, post_date))
+    
+    # Ordenar las publicaciones por fecha descendente (más recientes primero)
+    posts_sorted = sorted(posts_with_datetime, key=lambda x: x[1], reverse=True)
+    
+    # Extraer las publicaciones ordenadas
+    sorted_posts = [post_tuple[0] for post_tuple in posts_sorted]
+    
+    return render_template("index.html", all_posts=sorted_posts, current_user=current_user)
+
 
 
 @app.route("/post/<int:post_id>", methods=["GET", "POST"])
