@@ -10866,7 +10866,7 @@ header.masthead .post-heading .meta a {
 }
 
 .post-preview > a {
-  color: #212529;
+  color: #6c757d;
 }
 .post-preview > a:focus, .post-preview > a:hover {
   text-decoration: none;
@@ -10890,6 +10890,7 @@ header.masthead .post-heading .meta a {
 }
 .post-preview > .post-meta > a {
   text-decoration: none;
+  color: #6c757d;
 }
 @media (min-width: 992px) {
   .post-preview > a > .post-title {
