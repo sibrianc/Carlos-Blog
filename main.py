@@ -174,25 +174,25 @@ from flask import Flask, abort, render_template, redirect, url_for, flash
 
 @app.route('/')
 def get_all_posts():
-    # Obtener todas las publicaciones
+    # Get all the posts from the database
     result = db.session.execute(db.select(BlogPost))
     posts = result.scalars().all()
     
-    # Convertir las fechas de cadena a objetos datetime y agregar a una nueva lista
+    # Convert the date strings to datetime objects
     posts_with_datetime = []
     for post in posts:
         try:
-            # Asumiendo que el formato es "Month Day, Year", por ejemplo, "October 27, 2023"
+            # Assuming the date is in the format "Month day, Year"
             post_date = datetime.strptime(post.date, "%B %d, %Y")
         except ValueError:
-            # Manejar formatos de fecha incorrectos
-            post_date = datetime.min  # O una fecha predeterminada
+            # if the date is not in the expected format, set it to the minimum datetime value
+            post_date = datetime.min  
         posts_with_datetime.append((post, post_date))
     
-    # Ordenar las publicaciones por fecha descendente (más recientes primero)
+    # Sort the posts by datetime
     posts_sorted = sorted(posts_with_datetime, key=lambda x: x[1], reverse=True)
     
-    # Extraer las publicaciones ordenadas
+    # Get the posts without the datetime objects
     sorted_posts = [post_tuple[0] for post_tuple in posts_sorted]
     
     return render_template("index.html", all_posts=sorted_posts, current_user=current_user)
