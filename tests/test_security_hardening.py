@@ -1,6 +1,7 @@
 import pytest
 import sqlite3
 from pathlib import Path
+from sqlalchemy import text
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from main import BlogPost, Comment, User, create_app, create_post_comment, db
@@ -468,6 +469,42 @@ def test_post_route_works_with_legacy_comment_schema(tmp_path):
     assert response.status_code == 200
     assert b"Legacy Comments Post" in response.data
     assert b"Legacy comment" in response.data
+
+
+def test_post_route_works_with_orphaned_comment_author(client, app):
+    with app.app_context():
+        author = create_user("writer@example.com", "long-password-123", name="Writer")
+        post = BlogPost(
+            title="Orphaned comment author",
+            subtitle="Still Works",
+            body="<p>Hello</p>",
+            img_url="https://example.com/image.jpg",
+            author=author,
+            date="March 12, 2026",
+        )
+        db.session.add(post)
+        db.session.commit()
+        db.session.execute(
+            text(
+                """
+                INSERT INTO comments (text, author_id, post_id, parent_id)
+                VALUES (:text, :author_id, :post_id, :parent_id)
+                """
+            ),
+            {
+                "text": "Comment from deleted user",
+                "author_id": 9999,
+                "post_id": post.id,
+                "parent_id": None,
+            },
+        )
+        db.session.commit()
+
+    response = client.get("/post/1")
+
+    assert response.status_code == 200
+    assert b"Comment from deleted user" in response.data
+    assert b"Deleted user" in response.data
 
 
 def test_create_post_comment_helper_works_with_legacy_comment_schema(tmp_path):

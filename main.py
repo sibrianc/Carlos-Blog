@@ -387,11 +387,6 @@ def rate_limit_events_table_exists():
     return bool(get_table_columns("rate_limit_events"))
 
 
-def comments_table_has_threading_columns():
-    comment_columns = get_table_columns("comments")
-    return {"parent_id", "timestamp"}.issubset(comment_columns)
-
-
 def hash_rate_limit_identifier(scope, identifier):
     secret = (current_app.secret_key or "").encode("utf-8")
     payload = f"{scope}:{identifier}".encode("utf-8")
@@ -419,21 +414,20 @@ def resolve_post_header_image(url):
 
 
 def fetch_post_comments(post_id):
-    if comments_table_has_threading_columns():
-        comments = db.session.execute(select(Comment).where(Comment.post_id == post_id)).scalars().all()
-        return sorted(comments, key=lambda comment: comment.timestamp or datetime.min, reverse=True)
-
-    if not get_table_columns("comments"):
+    comment_columns = get_table_columns("comments")
+    if not comment_columns:
         return []
 
+    timestamp_select = "comments.timestamp AS comment_timestamp" if "timestamp" in comment_columns else "NULL AS comment_timestamp"
+    order_by = "comments.timestamp DESC, comments.id DESC" if "timestamp" in comment_columns else "comments.id DESC"
     rows = db.session.execute(
         text(
-            """
-            SELECT comments.id, comments.text, users.email, users.name
+            f"""
+            SELECT comments.id, comments.text, {timestamp_select}, users.email, users.name
             FROM comments
-            JOIN users ON users.id = comments.author_id
+            LEFT JOIN users ON users.id = comments.author_id
             WHERE comments.post_id = :post_id
-            ORDER BY comments.id DESC
+            ORDER BY {order_by}
             """
         ),
         {"post_id": post_id},
@@ -443,9 +437,10 @@ def fetch_post_comments(post_id):
             id=row["id"],
             text=row["text"],
             author=CommentAuthorSnapshot(
-                email=row["email"],
-                name=row["name"],
+                email=row["email"] or "",
+                name=row["name"] or "Deleted user",
             ),
+            timestamp=row["comment_timestamp"],
         )
         for row in rows
     ]
