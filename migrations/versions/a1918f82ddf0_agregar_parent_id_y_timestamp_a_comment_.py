@@ -77,7 +77,7 @@ def upgrade():
             sa.Column("parent_id", sa.Integer(), nullable=True),
             sa.Column(
                 "timestamp",
-                sa.DateTime(),
+                sa.DateTime(timezone=True),
                 nullable=False,
                 server_default=sa.func.now(),
             ),
@@ -96,7 +96,7 @@ def upgrade():
             batch_op.add_column(
                 sa.Column(
                     "timestamp",
-                    sa.DateTime(),
+                    sa.DateTime(timezone=True),
                     nullable=False,
                     server_default=sa.func.now(),
                 )

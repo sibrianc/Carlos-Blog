@@ -1,7 +1,8 @@
+import hashlib
 import os
 import time
 from collections import defaultdict, deque
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from functools import wraps
 from threading import RLock
 
@@ -18,7 +19,6 @@ from flask import (
 )
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
-from flask_gravatar import Gravatar
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -164,9 +164,9 @@ class Comment(db.Model):
     post_id: Mapped[int] = mapped_column(ForeignKey("blog_posts.id"), nullable=False)
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("comments.id"), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
     )
 
@@ -272,6 +272,12 @@ def render_comment_html(value):
     return Markup(sanitize_html(value, COMMENT_ALLOWED_TAGS))
 
 
+def gravatar_url(email, size=100):
+    normalized_email = normalize_email(email).encode("utf-8")
+    email_hash = hashlib.md5(normalized_email, usedforsecurity=False).hexdigest()
+    return f"https://www.gravatar.com/avatar/{email_hash}?s={size}&d=retro&r=g"
+
+
 def sync_admin_from_config(user):
     admin_email = current_app.config.get("ADMIN_EMAIL", "")
     if admin_email and normalize_email(user.email) == admin_email and not user.is_admin:
@@ -367,6 +373,10 @@ def register_template_hooks(app):
     @app.template_filter("sanitize_comment_html")
     def sanitize_comment_html_filter(value):
         return render_comment_html(value)
+
+    @app.template_filter("gravatar")
+    def gravatar_filter(value):
+        return gravatar_url(value)
 
     @app.context_processor
     def inject_shared_context():
@@ -611,17 +621,6 @@ def create_app(test_config=None):
     rate_limiter.init_app(app)
     login_manager.login_view = "login"
     login_manager.session_protection = "strong"
-    Gravatar(
-        app,
-        size=100,
-        rating="g",
-        default="retro",
-        force_default=False,
-        force_lower=True,
-        use_ssl=True,
-        base_url=None,
-    )
-
     register_cli_commands(app)
     register_template_hooks(app)
     register_routes(app)
