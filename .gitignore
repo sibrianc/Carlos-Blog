@@ -166,3 +166,5 @@ cython_debug/
 .audit_tools/
 .audit_lib/
 .audit_lib2/
+.git_tools/
+.mailmap-rewrite
