@@ -1,7 +1,7 @@
 import pytest
 import sqlite3
 from pathlib import Path
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from main import BlogPost, Comment, User, create_app, db
 
@@ -58,6 +58,23 @@ def test_registration_can_be_disabled(client, app):
     response = client.get("/register", follow_redirects=True)
 
     assert b"Public registration is currently disabled." in response.data
+
+
+def test_registration_defaults_to_disabled_in_production(tmp_path, monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.delenv("PUBLIC_REGISTRATION_ENABLED", raising=False)
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "production-test",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'prod.db'}",
+            "WTF_CSRF_ENABLED": False,
+            "ADMIN_EMAIL": "",
+        }
+    )
+
+    assert app.config["PUBLIC_REGISTRATION_ENABLED"] is False
 
 
 def test_delete_requires_post(client):
@@ -199,3 +216,180 @@ def test_homepage_works_with_legacy_schema(tmp_path):
 
     assert response.status_code == 200
     assert b"Legacy Post" in response.data
+
+
+def test_security_headers_are_added(client):
+    response = client.get("/")
+
+    assert response.headers["Content-Security-Policy"]
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["Permissions-Policy"] == "camera=(), geolocation=(), microphone=()"
+    assert "Strict-Transport-Security" not in response.headers
+
+
+def test_hsts_is_enabled_when_secure_cookies_are_enabled(tmp_path):
+    app = create_app(
+        {
+            "TESTING": True,
+            "WTF_CSRF_ENABLED": False,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'secure.db'}",
+            "SECRET_KEY": "secure-secret",
+            "SESSION_COOKIE_SECURE": True,
+            "ADMIN_EMAIL": "",
+        }
+    )
+
+    with app.app_context():
+        db.create_all()
+
+    client = app.test_client()
+    response = client.get("/")
+
+    assert response.headers["Strict-Transport-Security"] == "max-age=31536000; includeSubDomains"
+    assert "upgrade-insecure-requests" in response.headers["Content-Security-Policy"]
+
+
+def test_post_header_image_falls_back_when_url_is_unsafe(client, app):
+    with app.app_context():
+        author = create_user("writer@example.com", "long-password-123", name="Writer")
+        post = BlogPost(
+            title="Unsafe image",
+            subtitle="Subtitle",
+            body="<p>Body</p>",
+            img_url='javascript:alert("xss")',
+            author=author,
+            date="March 12, 2026",
+        )
+        db.session.add(post)
+        db.session.commit()
+
+    response = client.get("/post/1")
+
+    assert b"javascript:alert" not in response.data
+    assert b"/static/assets/img/post-bg.jpg" in response.data
+
+
+def test_reset_password_cli_updates_the_stored_hash(app):
+    with app.app_context():
+        create_user("reset@example.com", "long-password-123", name="Reset")
+
+    runner = app.test_cli_runner()
+    result = runner.invoke(
+        args=[
+            "reset-password",
+            "--email",
+            "reset@example.com",
+            "--password",
+            "new-long-password-456",
+        ]
+    )
+
+    assert result.exit_code == 0
+    assert "Password updated for reset@example.com." in result.output
+
+    with app.app_context():
+        user = db.session.execute(db.select(User).where(User.email == "reset@example.com")).scalar_one()
+        assert check_password_hash(user.password, "new-long-password-456")
+
+
+def test_login_rate_limit_falls_back_to_memory_without_rate_limit_table(tmp_path):
+    db_path = Path(tmp_path) / "legacy-rate-limit.db"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.executescript(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            email VARCHAR(250) NOT NULL UNIQUE,
+            password VARCHAR(250) NOT NULL,
+            name VARCHAR(250) NOT NULL
+        );
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "memory-limit-secret",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path.as_posix()}",
+            "WTF_CSRF_ENABLED": False,
+            "ADMIN_EMAIL": "",
+            "RATE_LIMITS": {"login": 1, "register": 5, "comment": 10},
+            "RATE_LIMIT_WINDOWS": {"login": 3600, "register": 3600, "comment": 900},
+        }
+    )
+    client = app.test_client()
+
+    first_response = client.post(
+        "/login",
+        data={
+            "email": "missing@example.com",
+            "password": "long-password-123",
+            "submit": "Let Me In!",
+        },
+        follow_redirects=True,
+        environ_overrides={"REMOTE_ADDR": "198.51.100.23"},
+    )
+    second_response = client.post(
+        "/login",
+        data={
+            "email": "missing@example.com",
+            "password": "long-password-123",
+            "submit": "Let Me In!",
+        },
+        follow_redirects=True,
+        environ_overrides={"REMOTE_ADDR": "198.51.100.23"},
+    )
+
+    assert b"Invalid email or password." in first_response.data
+    assert b"Too many attempts." in second_response.data
+
+
+def test_login_rate_limit_persists_across_app_instances(tmp_path):
+    db_path = Path(tmp_path) / "persistent-rate-limit.db"
+    database_uri = f"sqlite:///{db_path.as_posix()}"
+    base_config = {
+        "TESTING": True,
+        "SECRET_KEY": "persistent-secret",
+        "SQLALCHEMY_DATABASE_URI": database_uri,
+        "WTF_CSRF_ENABLED": False,
+        "ADMIN_EMAIL": "",
+        "RATE_LIMITS": {"login": 1, "register": 5, "comment": 10},
+        "RATE_LIMIT_WINDOWS": {"login": 3600, "register": 3600, "comment": 900},
+    }
+
+    app_one = create_app(base_config)
+    with app_one.app_context():
+        db.create_all()
+
+    client_one = app_one.test_client()
+    first_response = client_one.post(
+        "/login",
+        data={
+            "email": "missing@example.com",
+            "password": "long-password-123",
+            "submit": "Let Me In!",
+        },
+        follow_redirects=True,
+        environ_overrides={"REMOTE_ADDR": "203.0.113.7"},
+    )
+
+    app_two = create_app(base_config)
+    client_two = app_two.test_client()
+    second_response = client_two.post(
+        "/login",
+        data={
+            "email": "missing@example.com",
+            "password": "long-password-123",
+            "submit": "Let Me In!",
+        },
+        follow_redirects=True,
+        environ_overrides={"REMOTE_ADDR": "203.0.113.7"},
+    )
+
+    assert b"Invalid email or password." in first_response.data
+    assert b"Too many attempts." in second_response.data

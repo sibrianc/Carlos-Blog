@@ -2,9 +2,10 @@ import hashlib
 import os
 import time
 from collections import defaultdict, deque
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from functools import wraps
 from threading import RLock
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import click
 from flask import (
@@ -30,8 +31,8 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
 from markupsafe import Markup, escape
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, inspect, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func, inspect, select, text
+from sqlalchemy.exc import IntegrityError, NoSuchTableError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -71,6 +72,7 @@ ALLOWED_ATTRIBUTES = {
     "img": ["src", "alt", "title"],
 }
 ALLOWED_PROTOCOLS = {"http", "https", "mailto"}
+UNSAFE_URL_CHARACTERS = {'"', "'", "(", ")", "\\", "\n", "\r", "<", ">"}
 
 
 class Base(DeclarativeBase):
@@ -85,15 +87,26 @@ login_manager = LoginManager()
 migrate = Migrate(compare_type=True)
 
 
-class SimpleRateLimiter:
+class DatabaseBackedRateLimiter:
     def __init__(self):
         self._locks = defaultdict(RLock)
 
     def init_app(self, app):
-        app.extensions["simple_rate_limiter"] = defaultdict(deque)
+        app.extensions["memory_rate_limiter"] = defaultdict(deque)
 
-    def is_allowed(self, app, bucket_key, limit, window_seconds):
-        buckets = app.extensions["simple_rate_limiter"]
+    def is_allowed(self, app, scope, identifier, limit, window_seconds):
+        if rate_limit_events_table_exists():
+            try:
+                return self._is_allowed_db(scope, identifier, limit, window_seconds)
+            except Exception:
+                db.session.rollback()
+                app.logger.exception("Falling back to in-memory rate limiting due to datastore error.")
+
+        bucket_key = f"{scope}:{identifier}"
+        return self._is_allowed_memory(app, bucket_key, limit, window_seconds)
+
+    def _is_allowed_memory(self, app, bucket_key, limit, window_seconds):
+        buckets = app.extensions["memory_rate_limiter"]
         lock = self._locks[bucket_key]
         now = time.time()
 
@@ -108,8 +121,42 @@ class SimpleRateLimiter:
             bucket.append(now)
             return True
 
+    def _is_allowed_db(self, scope, identifier, limit, window_seconds):
+        now = datetime.now(UTC)
+        window_start = now - timedelta(seconds=window_seconds)
+        retention_cutoff = now - timedelta(seconds=current_app.config["RATE_LIMIT_RETENTION_SECONDS"])
+        identifier_hash = hash_rate_limit_identifier(scope, identifier)
+        lock = self._locks[f"db:{identifier_hash}"]
 
-rate_limiter = SimpleRateLimiter()
+        with lock:
+            db.session.execute(
+                text("DELETE FROM rate_limit_events WHERE created_at < :retention_cutoff"),
+                {"retention_cutoff": retention_cutoff},
+            )
+            current_count = db.session.execute(
+                select(func.count(RateLimitEvent.id)).where(
+                    RateLimitEvent.scope == scope,
+                    RateLimitEvent.identifier_hash == identifier_hash,
+                    RateLimitEvent.created_at >= window_start,
+                )
+            ).scalar_one()
+
+            if current_count >= limit:
+                db.session.commit()
+                return False
+
+            db.session.add(
+                RateLimitEvent(
+                    scope=scope,
+                    identifier_hash=identifier_hash,
+                    created_at=now,
+                )
+            )
+            db.session.commit()
+            return True
+
+
+rate_limiter = DatabaseBackedRateLimiter()
 
 
 class BlogPost(db.Model):
@@ -184,6 +231,28 @@ class Comment(db.Model):
         "Comment",
         back_populates="parent",
         cascade="all, delete-orphan",
+    )
+
+
+class RateLimitEvent(db.Model):
+    __tablename__ = "rate_limit_events"
+    __table_args__ = (
+        Index(
+            "ix_rate_limit_events_scope_identifier_created_at",
+            "scope",
+            "identifier_hash",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(50), nullable=False)
+    identifier_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
     )
 
 
@@ -281,15 +350,52 @@ def gravatar_url(email, size=100):
     return f"https://www.gravatar.com/avatar/{email_hash}?s={size}&d=retro&r=g"
 
 
-def users_table_has_is_admin_column():
+def get_table_columns(table_name):
     cache = current_app.extensions.setdefault("schema_cache", {})
-    if "users_has_is_admin" not in cache:
+    cache_key = f"{table_name}_columns"
+    if cache_key not in cache:
         try:
-            columns = {column["name"] for column in inspect(db.engine).get_columns("users")}
-            cache["users_has_is_admin"] = "is_admin" in columns
+            cache[cache_key] = {column["name"] for column in inspect(db.engine).get_columns(table_name)}
+        except NoSuchTableError:
+            return set()
         except Exception:
-            cache["users_has_is_admin"] = False
-    return cache["users_has_is_admin"]
+            current_app.logger.exception("Unable to inspect table metadata for %s.", table_name)
+            return set()
+    return cache[cache_key]
+
+
+def users_table_has_is_admin_column():
+    return "is_admin" in get_table_columns("users")
+
+
+def rate_limit_events_table_exists():
+    return bool(get_table_columns("rate_limit_events"))
+
+
+def hash_rate_limit_identifier(scope, identifier):
+    secret = (current_app.secret_key or "").encode("utf-8")
+    payload = f"{scope}:{identifier}".encode("utf-8")
+    return hashlib.sha256(secret + b":" + payload).hexdigest()
+
+
+def safe_external_image_url(value):
+    candidate = (value or "").strip()
+    if not candidate or any(char in candidate for char in UNSAFE_URL_CHARACTERS):
+        return None
+
+    parts = urlsplit(candidate)
+    if parts.scheme not in {"http", "https"} or not parts.netloc:
+        return None
+    if parts.username or parts.password:
+        return None
+
+    safe_path = quote(parts.path or "/", safe="/%:@-._~!$&*+,;=")
+    safe_query = quote(parts.query, safe="=&%:@-._~!$*+,;")
+    return urlunsplit((parts.scheme, parts.netloc, safe_path, safe_query, ""))
+
+
+def resolve_post_header_image(url):
+    return safe_external_image_url(url) or url_for("static", filename="assets/img/post-bg.jpg")
 
 
 def persist_admin_flag(user_id, is_admin):
@@ -320,10 +426,23 @@ def commit_changes():
 
 
 def get_client_ip():
-    forwarded_for = request.headers.get("X-Forwarded-For", "")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
     return request.remote_addr or "unknown"
+
+
+def get_rate_limit_identifier(scope):
+    client_ip = get_client_ip()
+
+    if scope == "register":
+        return client_ip
+
+    if scope == "login":
+        email = normalize_email(request.form.get("email"))
+        return f"{client_ip}:{email or 'anonymous'}"
+
+    if scope == "comment" and current_user.is_authenticated:
+        return f"{client_ip}:user:{current_user.get_id()}"
+
+    return client_ip
 
 
 def enforce_rate_limit(scope, endpoint, endpoint_values=None):
@@ -331,9 +450,12 @@ def enforce_rate_limit(scope, endpoint, endpoint_values=None):
     if not limit:
         return None
 
-    window_seconds = current_app.config["RATE_LIMIT_WINDOW_SECONDS"]
-    bucket_key = f"{scope}:{get_client_ip()}"
-    if rate_limiter.is_allowed(current_app, bucket_key, limit, window_seconds):
+    window_seconds = current_app.config["RATE_LIMIT_WINDOWS"].get(
+        scope,
+        current_app.config["RATE_LIMIT_WINDOW_SECONDS"],
+    )
+    identifier = get_rate_limit_identifier(scope)
+    if rate_limiter.is_allowed(current_app, scope, identifier, limit, window_seconds):
         return None
 
     flash("Too many attempts. Please wait a few minutes before trying again.", "warning")
@@ -369,6 +491,40 @@ def sort_posts(posts):
     return [post for post, _ in sorted(dated_posts, key=lambda item: item[1], reverse=True)]
 
 
+def build_content_security_policy(production):
+    directives = [
+        "default-src 'self'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        "connect-src 'self'",
+        "img-src 'self' https: data:",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://use.fontawesome.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com data:",
+    ]
+    if production:
+        directives.append("upgrade-insecure-requests")
+    return "; ".join(directives)
+
+
+def register_security_headers(app):
+    production = app.config["SESSION_COOKIE_SECURE"]
+    content_security_policy = build_content_security_policy(production)
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers["Content-Security-Policy"] = content_security_policy
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=()"
+        if production:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
 def register_cli_commands(app):
     @app.cli.command("sync-admin-from-env")
     @click.option("--email", default=None, help="Override ADMIN_EMAIL for this run.")
@@ -394,6 +550,23 @@ def register_cli_commands(app):
             "ADMIN_EMAIL still grants admin access until that migration is applied."
         )
 
+    @app.cli.command("reset-password")
+    @click.option("--email", required=True, help="Email of the account to update.")
+    @click.password_option("--password", confirmation_prompt=True)
+    def reset_password(email, password):
+        normalized_email = normalize_email(email)
+        user = db.session.execute(select(User).where(User.email == normalized_email)).scalar_one_or_none()
+        if user is None:
+            raise click.ClickException(f"No user found for {normalized_email}.")
+
+        user.password = generate_password_hash(
+            password,
+            method="pbkdf2:sha256",
+            salt_length=16,
+        )
+        db.session.commit()
+        click.echo(f"Password updated for {normalized_email}.")
+
 
 def register_template_hooks(app):
     @app.template_filter("sanitize_post_html")
@@ -407,6 +580,10 @@ def register_template_hooks(app):
     @app.template_filter("gravatar")
     def gravatar_filter(value):
         return gravatar_url(value)
+
+    @app.template_filter("post_header_image")
+    def post_header_image_filter(value):
+        return resolve_post_header_image(value)
 
     @app.context_processor
     def inject_shared_context():
@@ -529,6 +706,7 @@ def register_routes(app):
         return render_template(
             "post.html",
             post=requested_post,
+            post_header_image=resolve_post_header_image(requested_post.img_url),
             current_user=current_user,
             form=form if current_user.is_authenticated else None,
             comments=comments,
@@ -636,11 +814,14 @@ def create_app(test_config=None):
         ),
         ADMIN_EMAIL=normalize_email(os.getenv("ADMIN_EMAIL")),
         RATE_LIMITS={"login": 5, "register": 5, "comment": 10},
+        RATE_LIMIT_WINDOWS={"login": 300, "register": 3600, "comment": 900},
         RATE_LIMIT_WINDOW_SECONDS=300,
+        RATE_LIMIT_RETENTION_SECONDS=86400,
     )
 
     if test_config:
         app.config.update(test_config)
+        app.config["ADMIN_EMAIL"] = normalize_email(app.config.get("ADMIN_EMAIL"))
 
     bootstrap.init_app(app)
     ckeditor.init_app(app)
@@ -651,6 +832,7 @@ def create_app(test_config=None):
     rate_limiter.init_app(app)
     login_manager.login_view = "login"
     login_manager.session_protection = "strong"
+    register_security_headers(app)
     register_cli_commands(app)
     register_template_hooks(app)
     register_routes(app)

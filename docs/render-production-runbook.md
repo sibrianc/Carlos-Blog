@@ -13,7 +13,8 @@
 2. Deploy the web service without changing the database instance.
 3. Run `flask db upgrade` against the production database.
 4. Run `flask sync-admin-from-env` once if the admin flag has not been persisted yet.
-5. Verify login, admin access, existing posts, comments, and create/edit/delete flows.
+5. If you need to recover an account, open a Render shell for the web service and run `flask --app main reset-password --email you@example.com`.
+6. Verify login, admin access, existing posts, comments, and create/edit/delete flows.
 
 ## Rollback
 1. If the deploy is bad, stop applying new migrations.
@@ -28,3 +29,5 @@
 - Logout and delete actions only work via POST.
 - Login failures return the generic error message.
 - Registration behavior matches `PUBLIC_REGISTRATION_ENABLED`.
+- Password reset through the Render shell updates the intended account and nothing else.
+- Rate limiting still works after an app restart once the `rate_limit_events` migration is applied.
