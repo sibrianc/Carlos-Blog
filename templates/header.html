@@ -43,12 +43,19 @@
           <li class="nav-item">
             <a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('login') }}">Login</a>
           </li>
+          {% if registration_enabled %}
           <li class="nav-item">
             <a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('register') }}">Register</a>
           </li>
+          {% endif %}
           {% else %}
           <li class="nav-item">
-            <a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('logout') }}">Log Out</a>
+            <form action="{{ url_for('logout') }}" method="post" class="d-inline">
+              {{ logout_form.hidden_tag() }}
+              <button class="nav-link px-lg-3 py-3 py-lg-4 btn btn-link text-decoration-none" type="submit">
+                Log Out
+              </button>
+            </form>
           </li>
           {% endif %}
           <li class="nav-item">
@@ -59,6 +66,14 @@
     </div>
   </nav>
 
-</body>
-
-</html>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="container px-4 px-lg-5 mt-3">
+      {% for category, message in messages %}
+      <div class="alert alert-{{ category }} mb-2" role="alert">
+        {{ message }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
