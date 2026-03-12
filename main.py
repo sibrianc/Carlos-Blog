@@ -723,6 +723,7 @@ def register_routes(app):
                 login_user(new_user)
                 sync_admin_from_config(new_user)
                 return redirect(url_for("get_all_posts"))
+            flash("Please correct the highlighted registration fields and try again.", "warning")
 
         return render_template(
             "register.html",
@@ -752,6 +753,7 @@ def register_routes(app):
                 login_user(user)
                 sync_admin_from_config(user)
                 return redirect(url_for("get_all_posts"))
+            flash("Please enter a valid email and password.", "warning")
 
         return render_template("login.html", form=form, current_user=current_user)
 

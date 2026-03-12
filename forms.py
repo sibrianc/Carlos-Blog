@@ -38,7 +38,7 @@ class LoginForm(FlaskForm):
             Regexp(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", message="Enter a valid email address."),
         ],
     )
-    password = PasswordField("Password", validators=[DataRequired(), Length(min=12, max=128)])
+    password = PasswordField("Password", validators=[DataRequired(), Length(max=128)])
     submit = SubmitField("Let Me In!")
 
 

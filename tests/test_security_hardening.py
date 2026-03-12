@@ -114,6 +114,25 @@ def test_login_uses_generic_error_message(client, app):
     assert b"Invalid email or password." in unknown_user_response.data
 
 
+def test_login_accepts_legacy_short_passwords(client, app):
+    with app.app_context():
+        create_user("legacy@example.com", "shortpass", name="Legacy")
+
+    response = login(client, "legacy@example.com", "shortpass")
+
+    assert b"Log Out" in response.data
+
+
+def test_login_shows_feedback_when_form_validation_fails(client):
+    response = client.post(
+        "/login",
+        data={"email": "not-an-email", "password": "", "submit": "Let Me In!"},
+        follow_redirects=True,
+    )
+
+    assert b"Please enter a valid email and password." in response.data
+
+
 def test_post_body_is_sanitized_on_render(client, app):
     with app.app_context():
         author = create_user("admin@example.com", "long-password-123", name="Admin")
