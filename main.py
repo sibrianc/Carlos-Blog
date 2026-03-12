@@ -30,10 +30,9 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
 from markupsafe import Markup, escape
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy.sql import expression
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -139,12 +138,6 @@ class User(UserMixin, db.Model):
     email: Mapped[str] = mapped_column(String(250), unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String(250), nullable=False)
     name: Mapped[str] = mapped_column(String(250), nullable=False)
-    is_admin: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default=expression.false(),
-    )
 
     posts: Mapped[list[BlogPost]] = relationship("BlogPost", back_populates="author")
     comments: Mapped[list["Comment"]] = relationship("Comment", back_populates="author")
@@ -152,7 +145,17 @@ class User(UserMixin, db.Model):
     @property
     def has_admin_access(self):
         admin_email = current_app.config.get("ADMIN_EMAIL", "")
-        return bool(self.is_admin or (admin_email and self.email.lower() == admin_email))
+        if admin_email and normalize_email(self.email) == admin_email:
+            return True
+
+        if not self.id or not users_table_has_is_admin_column():
+            return False
+
+        result = db.session.execute(
+            text("SELECT is_admin FROM users WHERE id = :user_id"),
+            {"user_id": self.id},
+        ).scalar_one_or_none()
+        return bool(result)
 
 
 class Comment(db.Model):
@@ -278,11 +281,33 @@ def gravatar_url(email, size=100):
     return f"https://www.gravatar.com/avatar/{email_hash}?s={size}&d=retro&r=g"
 
 
+def users_table_has_is_admin_column():
+    cache = current_app.extensions.setdefault("schema_cache", {})
+    if "users_has_is_admin" not in cache:
+        try:
+            columns = {column["name"] for column in inspect(db.engine).get_columns("users")}
+            cache["users_has_is_admin"] = "is_admin" in columns
+        except Exception:
+            cache["users_has_is_admin"] = False
+    return cache["users_has_is_admin"]
+
+
+def persist_admin_flag(user_id, is_admin):
+    if not user_id or not users_table_has_is_admin_column():
+        return False
+
+    db.session.execute(
+        text("UPDATE users SET is_admin = :is_admin WHERE id = :user_id"),
+        {"is_admin": bool(is_admin), "user_id": user_id},
+    )
+    db.session.commit()
+    return True
+
+
 def sync_admin_from_config(user):
     admin_email = current_app.config.get("ADMIN_EMAIL", "")
-    if admin_email and normalize_email(user.email) == admin_email and not user.is_admin:
-        user.is_admin = True
-        db.session.commit()
+    if admin_email and normalize_email(user.email) == admin_email:
+        persist_admin_flag(user.id, True)
 
 
 def commit_changes():
@@ -356,13 +381,18 @@ def register_cli_commands(app):
         if user is None:
             raise click.ClickException(f"No user found for {admin_email}.")
 
-        if user.is_admin:
+        if user.has_admin_access:
             click.echo(f"{admin_email} is already an admin.")
             return
 
-        user.is_admin = True
-        db.session.commit()
-        click.echo(f"{admin_email} is now an admin.")
+        if persist_admin_flag(user.id, True):
+            click.echo(f"{admin_email} is now an admin.")
+            return
+
+        click.echo(
+            "The database does not have a persistent is_admin column yet. "
+            "ADMIN_EMAIL still grants admin access until that migration is applied."
+        )
 
 
 def register_template_hooks(app):
@@ -420,7 +450,6 @@ def register_routes(app):
                         method="pbkdf2:sha256",
                         salt_length=16,
                     ),
-                    is_admin=email == current_app.config.get("ADMIN_EMAIL"),
                 )
                 db.session.add(new_user)
 
@@ -429,6 +458,7 @@ def register_routes(app):
                     return render_template("register.html", form=form, current_user=current_user), 400
 
                 login_user(new_user)
+                sync_admin_from_config(new_user)
                 return redirect(url_for("get_all_posts"))
 
         return render_template("register.html", form=form, current_user=current_user)
