@@ -3,7 +3,7 @@ import sqlite3
 from pathlib import Path
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from main import BlogPost, Comment, User, create_app, db
+from main import BlogPost, Comment, User, create_app, create_post_comment, db
 
 
 def create_user(email, password, *, name="User"):
@@ -393,3 +393,240 @@ def test_login_rate_limit_persists_across_app_instances(tmp_path):
 
     assert b"Invalid email or password." in first_response.data
     assert b"Too many attempts." in second_response.data
+
+
+def test_post_route_works_with_legacy_comment_schema(tmp_path):
+    db_path = Path(tmp_path) / "legacy-post-route.db"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.executescript(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            email VARCHAR(250) NOT NULL UNIQUE,
+            password VARCHAR(250) NOT NULL,
+            name VARCHAR(250) NOT NULL
+        );
+        CREATE TABLE blog_posts (
+            id INTEGER PRIMARY KEY,
+            title VARCHAR(250) NOT NULL UNIQUE,
+            subtitle VARCHAR(250) NOT NULL,
+            date VARCHAR(250) NOT NULL,
+            body TEXT NOT NULL,
+            img_url VARCHAR(250) NOT NULL,
+            author_id INTEGER NOT NULL,
+            FOREIGN KEY(author_id) REFERENCES users(id)
+        );
+        CREATE TABLE comments (
+            id INTEGER PRIMARY KEY,
+            text TEXT NOT NULL,
+            author_id INTEGER NOT NULL,
+            post_id INTEGER NOT NULL,
+            FOREIGN KEY(author_id) REFERENCES users(id),
+            FOREIGN KEY(post_id) REFERENCES blog_posts(id)
+        );
+        """
+    )
+    cur.execute(
+        "INSERT INTO users (id, email, password, name) VALUES (1, ?, ?, ?)",
+        ("writer@example.com", "hash", "Writer"),
+    )
+    cur.execute(
+        """
+        INSERT INTO blog_posts (id, title, subtitle, date, body, img_url, author_id)
+        VALUES (1, ?, ?, ?, ?, ?, 1)
+        """,
+        (
+            "Legacy Comments Post",
+            "Still Works",
+            "March 12, 2026",
+            "<p>Hello</p>",
+            "https://example.com/image.jpg",
+        ),
+    )
+    cur.execute(
+        "INSERT INTO comments (id, text, author_id, post_id) VALUES (1, ?, 1, 1)",
+        ("Legacy comment",),
+    )
+    conn.commit()
+    conn.close()
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "legacy-post-route",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path.as_posix()}",
+            "WTF_CSRF_ENABLED": False,
+            "PUBLIC_REGISTRATION_ENABLED": True,
+            "ADMIN_EMAIL": "",
+        }
+    )
+    client = app.test_client()
+
+    response = client.get("/post/1")
+
+    assert response.status_code == 200
+    assert b"Legacy Comments Post" in response.data
+    assert b"Legacy comment" in response.data
+
+
+def test_create_post_comment_helper_works_with_legacy_comment_schema(tmp_path):
+    db_path = Path(tmp_path) / "legacy-comment-helper.db"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.executescript(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            email VARCHAR(250) NOT NULL UNIQUE,
+            password VARCHAR(250) NOT NULL,
+            name VARCHAR(250) NOT NULL
+        );
+        CREATE TABLE blog_posts (
+            id INTEGER PRIMARY KEY,
+            title VARCHAR(250) NOT NULL UNIQUE,
+            subtitle VARCHAR(250) NOT NULL,
+            date VARCHAR(250) NOT NULL,
+            body TEXT NOT NULL,
+            img_url VARCHAR(250) NOT NULL,
+            author_id INTEGER NOT NULL,
+            FOREIGN KEY(author_id) REFERENCES users(id)
+        );
+        CREATE TABLE comments (
+            id INTEGER PRIMARY KEY,
+            text TEXT NOT NULL,
+            author_id INTEGER NOT NULL,
+            post_id INTEGER NOT NULL,
+            FOREIGN KEY(author_id) REFERENCES users(id),
+            FOREIGN KEY(post_id) REFERENCES blog_posts(id)
+        );
+        """
+    )
+    cur.execute(
+        "INSERT INTO users (id, email, password, name) VALUES (1, ?, ?, ?)",
+        ("writer@example.com", "hash", "Writer"),
+    )
+    cur.execute(
+        """
+        INSERT INTO blog_posts (id, title, subtitle, date, body, img_url, author_id)
+        VALUES (1, ?, ?, ?, ?, ?, 1)
+        """,
+        (
+            "Legacy Comment Submit",
+            "Still Works",
+            "March 12, 2026",
+            "<p>Hello</p>",
+            "https://example.com/image.jpg",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "legacy-comment-submit",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path.as_posix()}",
+            "WTF_CSRF_ENABLED": False,
+            "PUBLIC_REGISTRATION_ENABLED": True,
+            "ADMIN_EMAIL": "",
+        }
+    )
+    with app.app_context():
+        create_post_comment(1, 1, "A new legacy-safe comment")
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    rows = list(cur.execute("SELECT text FROM comments ORDER BY id"))
+    conn.close()
+
+    assert rows == [("A new legacy-safe comment",)]
+
+
+def test_delete_route_works_with_legacy_comment_schema(tmp_path):
+    db_path = Path(tmp_path) / "legacy-delete-route.db"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.executescript(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            email VARCHAR(250) NOT NULL UNIQUE,
+            password VARCHAR(250) NOT NULL,
+            name VARCHAR(250) NOT NULL
+        );
+        CREATE TABLE blog_posts (
+            id INTEGER PRIMARY KEY,
+            title VARCHAR(250) NOT NULL UNIQUE,
+            subtitle VARCHAR(250) NOT NULL,
+            date VARCHAR(250) NOT NULL,
+            body TEXT NOT NULL,
+            img_url VARCHAR(250) NOT NULL,
+            author_id INTEGER NOT NULL,
+            FOREIGN KEY(author_id) REFERENCES users(id)
+        );
+        CREATE TABLE comments (
+            id INTEGER PRIMARY KEY,
+            text TEXT NOT NULL,
+            author_id INTEGER NOT NULL,
+            post_id INTEGER NOT NULL,
+            FOREIGN KEY(author_id) REFERENCES users(id),
+            FOREIGN KEY(post_id) REFERENCES blog_posts(id)
+        );
+        """
+    )
+    password_hash = generate_password_hash(
+        "long-password-123",
+        method="pbkdf2:sha256",
+        salt_length=16,
+    )
+    cur.execute(
+        "INSERT INTO users (id, email, password, name) VALUES (1, ?, ?, ?)",
+        ("admin@example.com", password_hash, "Admin"),
+    )
+    cur.execute(
+        """
+        INSERT INTO blog_posts (id, title, subtitle, date, body, img_url, author_id)
+        VALUES (1, ?, ?, ?, ?, ?, 1)
+        """,
+        (
+            "Legacy Delete Post",
+            "Still Works",
+            "March 12, 2026",
+            "<p>Hello</p>",
+            "https://example.com/image.jpg",
+        ),
+    )
+    cur.execute(
+        "INSERT INTO comments (id, text, author_id, post_id) VALUES (1, ?, 1, 1)",
+        ("Legacy comment",),
+    )
+    conn.commit()
+    conn.close()
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "legacy-delete-route",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path.as_posix()}",
+            "WTF_CSRF_ENABLED": False,
+            "PUBLIC_REGISTRATION_ENABLED": True,
+            "ADMIN_EMAIL": "admin@example.com",
+        }
+    )
+    client = app.test_client()
+
+    login(client, "admin@example.com", "long-password-123")
+    response = client.post("/delete/1", data={"submit": "Submit"}, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Post deleted." in response.data
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    remaining_posts = list(cur.execute("SELECT id FROM blog_posts"))
+    remaining_comments = list(cur.execute("SELECT id FROM comments"))
+    conn.close()
+
+    assert remaining_posts == []
+    assert remaining_comments == []

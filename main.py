@@ -2,6 +2,7 @@ import hashlib
 import os
 import time
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from functools import wraps
 from threading import RLock
@@ -157,6 +158,20 @@ class DatabaseBackedRateLimiter:
 
 
 rate_limiter = DatabaseBackedRateLimiter()
+
+
+@dataclass(slots=True)
+class CommentAuthorSnapshot:
+    email: str
+    name: str
+
+
+@dataclass(slots=True)
+class CommentSnapshot:
+    id: int
+    text: str
+    author: CommentAuthorSnapshot
+    timestamp: datetime | None = None
 
 
 class BlogPost(db.Model):
@@ -372,6 +387,11 @@ def rate_limit_events_table_exists():
     return bool(get_table_columns("rate_limit_events"))
 
 
+def comments_table_has_threading_columns():
+    comment_columns = get_table_columns("comments")
+    return {"parent_id", "timestamp"}.issubset(comment_columns)
+
+
 def hash_rate_limit_identifier(scope, identifier):
     secret = (current_app.secret_key or "").encode("utf-8")
     payload = f"{scope}:{identifier}".encode("utf-8")
@@ -396,6 +416,69 @@ def safe_external_image_url(value):
 
 def resolve_post_header_image(url):
     return safe_external_image_url(url) or url_for("static", filename="assets/img/post-bg.jpg")
+
+
+def fetch_post_comments(post_id):
+    if comments_table_has_threading_columns():
+        comments = db.session.execute(select(Comment).where(Comment.post_id == post_id)).scalars().all()
+        return sorted(comments, key=lambda comment: comment.timestamp or datetime.min, reverse=True)
+
+    if not get_table_columns("comments"):
+        return []
+
+    rows = db.session.execute(
+        text(
+            """
+            SELECT comments.id, comments.text, users.email, users.name
+            FROM comments
+            JOIN users ON users.id = comments.author_id
+            WHERE comments.post_id = :post_id
+            ORDER BY comments.id DESC
+            """
+        ),
+        {"post_id": post_id},
+    ).mappings()
+    return [
+        CommentSnapshot(
+            id=row["id"],
+            text=row["text"],
+            author=CommentAuthorSnapshot(
+                email=row["email"],
+                name=row["name"],
+            ),
+        )
+        for row in rows
+    ]
+
+
+def create_post_comment(post_id, author_id, comment_text):
+    db.session.execute(
+        text(
+            """
+            INSERT INTO comments (text, author_id, post_id)
+            VALUES (:comment_text, :author_id, :post_id)
+            """
+        ),
+        {
+            "comment_text": comment_text,
+            "author_id": author_id,
+            "post_id": post_id,
+        },
+    )
+    db.session.commit()
+
+
+def delete_post_record(post_id):
+    if get_table_columns("comments"):
+        db.session.execute(
+            text("DELETE FROM comments WHERE post_id = :post_id"),
+            {"post_id": post_id},
+        )
+    db.session.execute(
+        text("DELETE FROM blog_posts WHERE id = :post_id"),
+        {"post_id": post_id},
+    )
+    db.session.commit()
 
 
 def persist_admin_flag(user_id, is_admin):
@@ -689,20 +772,24 @@ def register_routes(app):
                 return limited_response
 
             if form.validate_on_submit():
-                new_comment = Comment(
-                    text=sanitize_comment_html_for_storage(form.comment_text.data),
-                    author=current_user,
-                    post=requested_post,
-                )
-                db.session.add(new_comment)
-
-                if not commit_changes():
+                try:
+                    create_post_comment(
+                        requested_post.id,
+                        current_user.id,
+                        sanitize_comment_html_for_storage(form.comment_text.data),
+                    )
+                except IntegrityError:
+                    db.session.rollback()
+                    flash("We could not save your comment. Please try again.", "danger")
+                except Exception:
+                    db.session.rollback()
+                    current_app.logger.exception("Unable to save comment for post %s.", requested_post.id)
                     flash("We could not save your comment. Please try again.", "danger")
                 else:
                     flash("Comment added.", "success")
                 return redirect(url_for("show_post", post_id=post_id))
 
-        comments = sorted(requested_post.comments, key=lambda comment: comment.timestamp, reverse=True)
+        comments = fetch_post_comments(requested_post.id)
         return render_template(
             "post.html",
             post=requested_post,
@@ -773,10 +860,17 @@ def register_routes(app):
         if not form.validate_on_submit():
             abort(400)
 
-        post_to_delete = db.get_or_404(BlogPost, post_id)
-        db.session.delete(post_to_delete)
+        db.get_or_404(BlogPost, post_id)
 
-        if not commit_changes():
+        try:
+            delete_post_record(post_id)
+        except IntegrityError:
+            db.session.rollback()
+            flash("We could not delete that post safely.", "danger")
+            return redirect(url_for("show_post", post_id=post_id))
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Unable to delete post %s.", post_id)
             flash("We could not delete that post safely.", "danger")
             return redirect(url_for("show_post", post_id=post_id))
 
