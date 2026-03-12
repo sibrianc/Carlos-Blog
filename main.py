@@ -680,11 +680,19 @@ def register_routes(app):
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
-        if not is_registration_enabled():
-            flash("Public registration is currently disabled.", "warning")
-            return redirect(url_for("login"))
+        registration_enabled = is_registration_enabled()
+        form = RegisterForm() if registration_enabled else None
 
-        form = RegisterForm()
+        if not is_registration_enabled():
+            if request.method == "POST":
+                flash("Public registration is currently disabled.", "warning")
+            return render_template(
+                "register.html",
+                form=form,
+                current_user=current_user,
+                registration_enabled=registration_enabled,
+            ), 200
+
         if request.method == "POST":
             limited_response = enforce_rate_limit("register", "register")
             if limited_response:
@@ -716,7 +724,12 @@ def register_routes(app):
                 sync_admin_from_config(new_user)
                 return redirect(url_for("get_all_posts"))
 
-        return render_template("register.html", form=form, current_user=current_user)
+        return render_template(
+            "register.html",
+            form=form,
+            current_user=current_user,
+            registration_enabled=registration_enabled,
+        )
 
     @app.route("/login", methods=["GET", "POST"])
     def login():

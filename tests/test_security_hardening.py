@@ -59,6 +59,21 @@ def test_registration_can_be_disabled(client, app):
     response = client.get("/register", follow_redirects=True)
 
     assert b"Public registration is currently disabled." in response.data
+    assert response.status_code == 200
+
+
+def test_register_link_is_visible_even_when_public_registration_is_disabled(client, app):
+    app.config["PUBLIC_REGISTRATION_ENABLED"] = False
+
+    response = client.get("/")
+
+    assert b'href="/register"' in response.data
+
+
+def test_login_page_links_to_registration_page(client, app):
+    response = client.get("/login")
+
+    assert b"Open the registration page" in response.data
 
 
 def test_registration_defaults_to_disabled_in_production(tmp_path, monkeypatch):

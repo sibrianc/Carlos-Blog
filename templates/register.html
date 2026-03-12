@@ -34,8 +34,20 @@ include "header.html" %}
   <div class="container">
     <div class="row">
       <div class="col-lg-8 col-md-10 mx-auto">
-        <!--TODO: render your registration form here-->
+        {% if registration_enabled %}
         {{ render_form(form, novalidate=True, button_map={"submit": "primary"}) }}
+        {% else %}
+        <div class="alert alert-warning" role="alert">
+          Public registration is currently disabled.
+        </div>
+        <p class="mb-3">
+          If you need access, enable <code>PUBLIC_REGISTRATION_ENABLED=true</code> in Render and redeploy the service.
+        </p>
+        <p class="mb-0">
+          Already have an account?
+          <a href="{{ url_for('login') }}">Log in here</a>.
+        </p>
+        {% endif %}
       </div>
     </div>
   </div>
