@@ -5,20 +5,25 @@ from main import create_app, db
 
 @pytest.fixture()
 def app(tmp_path, monkeypatch):
-    monkeypatch.delenv("RENDER", raising=False)
-    monkeypatch.delenv("RENDER_EXTERNAL_URL", raising=False)
-    monkeypatch.delenv("DB_URI", raising=False)
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("FLASK_KEY", raising=False)
+    monkeypatch.delenv('RENDER', raising=False)
+    monkeypatch.delenv('RENDER_EXTERNAL_URL', raising=False)
+    monkeypatch.delenv('DB_URI', raising=False)
+    monkeypatch.delenv('DATABASE_URL', raising=False)
+    monkeypatch.delenv('FLASK_KEY', raising=False)
+    monkeypatch.delenv('RESEND_API_KEY', raising=False)
+    monkeypatch.delenv('CONTACT_FROM_EMAIL', raising=False)
+    monkeypatch.delenv('CONTACT_RECIPIENT_EMAIL', raising=False)
+    monkeypatch.delenv('GOOGLE_CLIENT_ID', raising=False)
+    monkeypatch.delenv('GOOGLE_CLIENT_SECRET', raising=False)
 
     app = create_app(
         {
-            "TESTING": True,
-            "WTF_CSRF_ENABLED": False,
-            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
-            "SECRET_KEY": "test-secret",
-            "PUBLIC_REGISTRATION_ENABLED": True,
-            "ADMIN_EMAIL": "admin@example.com",
+            'TESTING': True,
+            'WTF_CSRF_ENABLED': False,
+            'SQLALCHEMY_DATABASE_URI': f"sqlite:///{tmp_path / 'test.db'}",
+            'SECRET_KEY': 'test-secret',
+            'PUBLIC_REGISTRATION_ENABLED': True,
+            'ADMIN_EMAIL': 'admin@example.com',
         }
     )
 
