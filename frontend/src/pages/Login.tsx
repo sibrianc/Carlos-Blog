@@ -76,7 +76,9 @@ export function Login() {
             <span className="material-symbols-outlined text-lg">account_circle</span>
             Continue with Google
           </a>
-        ) : null}
+        ) : (
+          <p className="text-center font-body text-xs text-on-surface-variant">Google sign-in is not active on this deployment yet. Confirm <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and redeploy on Render.</p>
+        )}
         {registrationEnabled && <p className="text-center font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant"><Link to="/register" className="hover:text-primary transition-colors">Open the registration page</Link></p>}
       </motion.form>
     </div>

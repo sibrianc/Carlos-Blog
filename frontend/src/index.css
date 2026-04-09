@@ -154,3 +154,58 @@
   font-family: var(--font-headline);
   font-style: italic;
 }
+
+
+.rich-editor-shell .ProseMirror {
+  min-height: 100%;
+  outline: none;
+}
+
+.rich-editor-shell .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: rgba(222, 227, 230, 0.45);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.rich-editor-shell .ProseMirror h2,
+.rich-editor-shell .ProseMirror h3,
+.rich-editor-shell .ProseMirror h4 {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  color: rgb(225 193 152);
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.rich-editor-shell .ProseMirror p,
+.rich-editor-shell .ProseMirror ul,
+.rich-editor-shell .ProseMirror ol,
+.rich-editor-shell .ProseMirror blockquote {
+  margin-bottom: 0.85rem;
+}
+
+.rich-editor-shell .ProseMirror ul,
+.rich-editor-shell .ProseMirror ol {
+  padding-left: 1.5rem;
+}
+
+.rich-editor-shell .ProseMirror ul {
+  list-style: disc;
+}
+
+.rich-editor-shell .ProseMirror ol {
+  list-style: decimal;
+}
+
+.rich-editor-shell .ProseMirror blockquote {
+  border-left: 2px solid rgba(113, 215, 205, 0.35);
+  padding-left: 1rem;
+  color: rgba(222, 227, 230, 0.82);
+}
+
+.rich-editor-shell .ProseMirror a {
+  color: rgb(113 215 205);
+  text-decoration: underline;
+}

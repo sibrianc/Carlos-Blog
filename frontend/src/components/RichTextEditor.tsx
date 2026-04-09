@@ -1,4 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { EditorContent, useEditor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Link from '@tiptap/extension-link';
+import Placeholder from '@tiptap/extension-placeholder';
 
 interface RichTextEditorProps {
   value: string;
@@ -7,139 +11,122 @@ interface RichTextEditorProps {
   height?: number;
 }
 
-type EditorMode = 'loading' | 'rich' | 'plain';
-
-const CKEDITOR_SCRIPT_SRC = 'https://cdn.ckeditor.com/4.22.1/standard-all/ckeditor.js';
-let ckeditorLoader: Promise<typeof window.CKEDITOR | null> | null = null;
-
-function loadCkeditor() {
-  if (typeof window === 'undefined') {
-    return Promise.resolve(null);
-  }
-
-  if (window.CKEDITOR) {
-    return Promise.resolve(window.CKEDITOR);
-  }
-
-  if (ckeditorLoader) {
-    return ckeditorLoader;
-  }
-
-  ckeditorLoader = new Promise((resolve) => {
-    const existingScript = document.querySelector(`script[src="${CKEDITOR_SCRIPT_SRC}"]`) as HTMLScriptElement | null;
-    const handleLoad = () => resolve(window.CKEDITOR ?? null);
-    const handleError = () => resolve(null);
-
-    if (existingScript) {
-      if (window.CKEDITOR) {
-        resolve(window.CKEDITOR);
-        return;
-      }
-      existingScript.addEventListener('load', handleLoad, { once: true });
-      existingScript.addEventListener('error', handleError, { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = CKEDITOR_SCRIPT_SRC;
-    script.async = true;
-    script.addEventListener('load', handleLoad, { once: true });
-    script.addEventListener('error', handleError, { once: true });
-    document.head.appendChild(script);
-  });
-
-  return ckeditorLoader;
+function normalizeHtml(value: string) {
+  return (value || '')
+    .replace(/<p><\/p>/g, '')
+    .replace(/<p>\s*<br\s*\/?><\/p>/g, '')
+    .trim();
 }
 
-export function RichTextEditor({ value, onChange, placeholder, height = 260 }: RichTextEditorProps) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const editorRef = useRef<{
-    on: (eventName: string, handler: () => void) => void;
-    setData: (value: string) => void;
-    getData: () => string;
-    destroy: (noUpdate?: boolean) => void;
-  } | null>(null);
-  const onChangeRef = useRef(onChange);
-  const [editorMode, setEditorMode] = useState<EditorMode>('loading');
+interface ToolbarButtonProps {
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}
 
-  onChangeRef.current = onChange;
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    let cancelled = false;
-
-    if (!textarea || editorRef.current) {
-      return;
-    }
-
-    void loadCkeditor().then((ckeditor) => {
-      if (cancelled || !textarea) {
-        return;
-      }
-
-      if (!ckeditor) {
-        setEditorMode('plain');
-        return;
-      }
-
-      const instance = ckeditor.replace(textarea, {
-        height,
-        removePlugins: 'elementspath',
-        resize_enabled: true,
-      });
-
-      instance.on('instanceReady', () => {
-        instance.setData(value || '');
-        if (!cancelled) {
-          setEditorMode('rich');
-        }
-      });
-      instance.on('change', () => {
-        onChangeRef.current(instance.getData());
-      });
-
-      editorRef.current = instance;
-    });
-
-    return () => {
-      cancelled = true;
-      if (editorRef.current) {
-        editorRef.current.destroy(true);
-        editorRef.current = null;
-      }
-    };
-  }, [height]);
-
-  useEffect(() => {
-    if (editorRef.current) {
-      if (editorRef.current.getData() !== value) {
-        editorRef.current.setData(value || '');
-      }
-      return;
-    }
-
-    if (textareaRef.current && textareaRef.current.value !== value) {
-      textareaRef.current.value = value || '';
-    }
-  }, [value]);
-
-  const isPlainFallback = editorMode === 'plain';
-
+function ToolbarButton({ label, active = false, disabled = false, onClick }: ToolbarButtonProps) {
   return (
-    <div className="space-y-3">
-      {isPlainFallback ? (
-        <p className="font-body text-xs text-on-surface-variant">
-          Rich text toolbar unavailable right now. Plain text editing is still active so you can keep writing safely.
-        </p>
-      ) : null}
-      <textarea
-        ref={textareaRef}
-        defaultValue={value}
-        placeholder={placeholder}
-        onChange={editorMode === 'plain' ? (event) => onChangeRef.current(event.target.value) : undefined}
-        className="w-full min-h-[220px] bg-background/50 border border-primary/30 rounded-sm px-4 py-3 text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-      />
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-sm border px-3 py-2 font-label text-[11px] uppercase tracking-[0.18em] transition-colors ${active
+        ? 'border-primary/60 bg-primary/20 text-primary'
+        : 'border-primary/20 bg-background/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'} disabled:opacity-40 disabled:cursor-not-allowed`}
+    >
+      {label}
+    </button>
   );
 }
 
+export function RichTextEditor({ value, onChange, placeholder, height = 260 }: RichTextEditorProps) {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [2, 3, 4] },
+      }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        defaultProtocol: 'https',
+        protocols: ['http', 'https', 'mailto'],
+      }),
+      Placeholder.configure({
+        placeholder: placeholder || 'Write here...',
+      }),
+    ],
+    content: value || '',
+    editorProps: {
+      attributes: {
+        class: 'tiptap-editor prose prose-invert max-w-none focus:outline-none',
+      },
+    },
+    onUpdate({ editor: activeEditor }) {
+      onChangeRef.current(activeEditor.getHTML());
+    },
+  });
+
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    const current = normalizeHtml(editor.getHTML());
+    const incoming = normalizeHtml(value);
+    if (current !== incoming) {
+      editor.commands.setContent(value || '', { emitUpdate: false });
+    }
+  }, [editor, value]);
+
+  const minHeightStyle = useMemo(() => ({ minHeight: `${height}px` }), [height]);
+
+  if (!editor) {
+    return (
+      <div className="rounded-sm border border-primary/20 bg-background/40 p-4">
+        <div className="h-40 animate-pulse rounded-sm bg-primary/5" />
+      </div>
+    );
+  }
+
+  const setLink = () => {
+    const previousUrl = editor.getAttributes('link').href || '';
+    const url = window.prompt('Enter the link URL', previousUrl);
+
+    if (url === null) {
+      return;
+    }
+
+    const trimmed = url.trim();
+    if (!trimmed) {
+      editor.chain().focus().unsetLink().run();
+      return;
+    }
+
+    editor.chain().focus().extendMarkRange('link').setLink({ href: trimmed }).run();
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2 rounded-sm border border-primary/15 bg-background/35 p-3">
+        <ToolbarButton label="Body" active={editor.isActive('paragraph')} onClick={() => editor.chain().focus().setParagraph().run()} />
+        <ToolbarButton label="H2" active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
+        <ToolbarButton label="H3" active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} />
+        <ToolbarButton label="Bold" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
+        <ToolbarButton label="Italic" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
+        <ToolbarButton label="Quote" active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
+        <ToolbarButton label="Bullets" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} />
+        <ToolbarButton label="Numbers" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
+        <ToolbarButton label="Link" active={editor.isActive('link')} onClick={setLink} />
+        <ToolbarButton label="Clear" onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()} />
+      </div>
+      <div className="overflow-hidden rounded-sm border border-primary/20 bg-background/45">
+        <EditorContent editor={editor} className="rich-editor-shell px-4 py-4 text-on-surface" style={minHeightStyle} />
+      </div>
+    </div>
+  );
+}

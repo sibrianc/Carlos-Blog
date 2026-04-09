@@ -11,6 +11,10 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
+    "@tiptap/extension-link": "^3.22.3",
+    "@tiptap/extension-placeholder": "^3.22.3",
+    "@tiptap/react": "^3.22.3",
+    "@tiptap/starter-kit": "^3.22.3",
     "@vitejs/plugin-react": "^5.0.4",
     "motion": "^12.23.24",
     "react": "^19.0.0",
