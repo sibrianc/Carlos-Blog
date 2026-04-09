@@ -108,6 +108,27 @@ def test_google_oauth_start_redirects_when_not_configured(client):
     assert response.headers['Location'].endswith('/login?oauth_error=google_unavailable')
 
 
+def test_api_session_reports_google_enabled_when_credentials_are_configured(tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, 'OAuth', object())
+    app = create_app(
+        {
+            'TESTING': True,
+            'SECRET_KEY': 'google-enabled',
+            'SQLALCHEMY_DATABASE_URI': f"sqlite:///{tmp_path / 'google.db'}",
+            'WTF_CSRF_ENABLED': False,
+            'ADMIN_EMAIL': '',
+            'GOOGLE_CLIENT_ID': 'google-client-id',
+            'GOOGLE_CLIENT_SECRET': 'google-client-secret',
+        }
+    )
+    client = app.test_client()
+
+    response = client.get('/api/session')
+
+    assert response.status_code == 200
+    assert response.get_json()['googleAuthEnabled'] is True
+
+
 def test_contact_route_returns_provider_unavailable_when_not_configured(client):
     response = api_contact(
         client,

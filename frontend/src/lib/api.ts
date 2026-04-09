@@ -8,6 +8,10 @@ import type {
   SessionPayload,
 } from '../types';
 
+const cloudinaryCloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME?.trim() || '';
+const cloudinaryUploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim() || '';
+const MAX_IMAGE_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024;
+
 export class ApiError extends Error {
   status: number;
   fieldErrors: Record<string, string[]>;
@@ -47,7 +51,7 @@ async function request<T>(
   const headers = new Headers(init.headers || {});
   const hasBody = init.body !== undefined && init.body !== null;
 
-  if (hasBody && !headers.has('Content-Type')) {
+  if (hasBody && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -63,6 +67,16 @@ async function request<T>(
 
   return parseResponse<T>(response);
 }
+
+function deriveImageAlt(fileName: string) {
+  return fileName
+    .replace(/\.[^.]+$/, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export const imageUploadsEnabled = Boolean(cloudinaryCloudName && cloudinaryUploadPreset);
 
 export const api = {
   fetchSession: () => request<SessionPayload>('/api/session'),
@@ -126,4 +140,37 @@ export const api = {
     ),
   deleteFragment: (id: string, csrfToken: string) =>
     request<{ deleted: boolean }>(`/api/fragments/${id}`, { method: 'DELETE' }, csrfToken),
+  uploadImage: async (file: File) => {
+    if (!imageUploadsEnabled) {
+      throw new Error('Image uploads are not configured yet. Add Cloudinary env vars in Render to enable them.');
+    }
+
+    if (!file.type.startsWith('image/')) {
+      throw new Error('Please choose a valid image file.');
+    }
+
+    if (file.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+      throw new Error('Images must be 8 MB or smaller.');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', cloudinaryUploadPreset);
+    formData.append('folder', 'the-living-codex');
+
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const payload = await response.json() as { error?: { message?: string }; secure_url?: string };
+    if (!response.ok || !payload.secure_url) {
+      throw new Error(payload.error?.message || 'Image upload failed.');
+    }
+
+    return {
+      imageUrl: payload.secure_url,
+      imageAlt: deriveImageAlt(file.name),
+    };
+  },
 };

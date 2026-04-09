@@ -8,6 +8,7 @@
 - Decide whether public signups stay open by setting `PUBLIC_REGISTRATION_ENABLED=true` or `false`.
 - Configure `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` if Google OAuth should be available in production.
 - Configure `RESEND_API_KEY`, `CONTACT_FROM_EMAIL`, and `CONTACT_RECIPIENT_EMAIL` if the live contact form should deliver emails in production.
+- Configure `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` if fragment images should upload directly from the browser in production.
 - Create a logical backup from Render Postgres.
 - Record the available PITR retention window in Render.
 
@@ -18,7 +19,7 @@
 4. Run `flask db upgrade` against the production database.
 5. Run `flask sync-admin-from-env` once if the admin flag has not been persisted yet.
 6. If you need to recover an account, open a Render shell for the web service and run `flask --app main reset-password --email you@example.com`.
-7. Verify login, Google login, admin access, existing posts, comments, create/edit/delete flows, and contact form delivery.
+7. Verify login, Google login, admin access, existing posts, comments, create/edit/delete flows, direct image uploads, and contact form delivery.
 
 ## Rollback
 1. If the deploy is bad, stop applying new migrations.
@@ -39,3 +40,4 @@
 - Password reset through the Render shell updates the intended account and nothing else.
 - Rate limiting still works after an app restart once the `rate_limit_events` migration is applied.
 - Contact form succeeds with valid configuration and fails cleanly when delivery config is missing.
+- Direct image upload succeeds only when the Cloudinary build vars are configured; otherwise the fragment form still accepts image URLs manually.

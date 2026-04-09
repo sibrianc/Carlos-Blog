@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppSession, getApiErrorMessage } from '../context/AppSessionContext';
-import { api } from '../lib/api';
+import { api, imageUploadsEnabled } from '../lib/api';
 import { RichTextEditor } from '../components/RichTextEditor';
 
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800&auto=format&fit=crop';
@@ -20,7 +20,9 @@ export function CreateFragment() {
   const [imageAlt, setImageAlt] = useState('');
   const [loading, setLoading] = useState(isEditing);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState('');
+  const [uploadError, setUploadError] = useState('');
 
   useEffect(() => {
     if (sessionLoading) {
@@ -77,6 +79,27 @@ export function CreateFragment() {
       active = false;
     };
   }, [authenticated, id, user]);
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setUploadError('');
+    setUploadingImage(true);
+
+    try {
+      const result = await api.uploadImage(file);
+      setImageSrc(result.imageUrl);
+      setImageAlt((current) => current.trim() || result.imageAlt);
+    } catch (err) {
+      setUploadError(getApiErrorMessage(err));
+    } finally {
+      setUploadingImage(false);
+      event.target.value = '';
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -140,16 +163,33 @@ export function CreateFragment() {
           <RichTextEditor value={loreText} onChange={setLoreText} placeholder="The deep history, the myth, the full story..." height={320} />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block font-label text-xs uppercase tracking-widest text-secondary mb-2">Image URL (Optional)</label>
+          <div className="space-y-3">
+            <label className="block font-label text-xs uppercase tracking-widest text-secondary">Image URL (Optional)</label>
             <input type="url" value={imageSrc} onChange={(event) => setImageSrc(event.target.value)} className="w-full bg-background/50 border border-primary/30 rounded-sm px-4 py-3 text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="https://..." />
+            <div className="space-y-2">
+              <label className="block font-label text-xs uppercase tracking-widest text-secondary">Upload Image From Your Device</label>
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" onChange={handleImageUpload} disabled={uploadingImage || !imageUploadsEnabled} className="block w-full text-sm text-on-surface file:mr-4 file:rounded-sm file:border file:border-primary/20 file:bg-primary-container/40 file:px-4 file:py-2 file:text-xs file:uppercase file:tracking-[0.18em] file:text-primary hover:file:bg-primary-container/60 disabled:opacity-50" />
+              <p className="font-body text-xs text-on-surface-variant">
+                {imageUploadsEnabled
+                  ? (uploadingImage ? 'Uploading image...' : 'Choose a file from your computer and it will be uploaded for this fragment.')
+                  : 'Image uploads are not configured in production yet. Add Cloudinary env vars in Render or paste an image URL above.'}
+              </p>
+              {uploadError ? <p className="font-body text-xs text-red-300">{uploadError}</p> : null}
+            </div>
           </div>
-          <div>
-            <label className="block font-label text-xs uppercase tracking-widest text-secondary mb-2">Image Alt Text</label>
-            <input type="text" value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} className="w-full bg-background/50 border border-primary/30 rounded-sm px-4 py-3 text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="Description of the image" />
+          <div className="space-y-3">
+            <div>
+              <label className="block font-label text-xs uppercase tracking-widest text-secondary mb-2">Image Alt Text</label>
+              <input type="text" value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} className="w-full bg-background/50 border border-primary/30 rounded-sm px-4 py-3 text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="Description of the image" />
+            </div>
+            {imageSrc ? (
+              <div className="overflow-hidden rounded-sm border border-primary/20 bg-background/40">
+                <img src={imageSrc} alt={imageAlt || title || 'Fragment image preview'} className="h-48 w-full object-cover" />
+              </div>
+            ) : null}
           </div>
         </div>
-        <button type="submit" disabled={submitting} className="w-full mt-8 py-4 bg-primary-container/50 hover:bg-primary-container text-primary font-label text-sm uppercase tracking-[0.2em] rounded-md transition-all duration-500 shadow-[inset_0_0_12px_rgba(113,215,205,0.1)] hover:shadow-[inset_0_0_20px_rgba(113,215,205,0.3)] border border-primary/20 disabled:opacity-50 disabled:cursor-not-allowed">{submitting ? (isEditing ? 'Reinscribing...' : 'Inscribing...') : isEditing ? 'Update Fragment' : 'Inscribe Fragment'}</button>
+        <button type="submit" disabled={submitting || uploadingImage} className="w-full mt-8 py-4 bg-primary-container/50 hover:bg-primary-container text-primary font-label text-sm uppercase tracking-[0.2em] rounded-md transition-all duration-500 shadow-[inset_0_0_12px_rgba(113,215,205,0.1)] hover:shadow-[inset_0_0_20px_rgba(113,215,205,0.3)] border border-primary/20 disabled:opacity-50 disabled:cursor-not-allowed">{submitting ? (isEditing ? 'Reinscribing...' : 'Inscribing...') : isEditing ? 'Update Fragment' : 'Inscribe Fragment'}</button>
       </motion.form>
     </div>
   );
