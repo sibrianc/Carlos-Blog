@@ -6,11 +6,20 @@ export interface SessionUser {
   avatarUrl: string;
 }
 
+export type GoogleAuthStatus =
+  | 'enabled'
+  | 'authlib_missing'
+  | 'missing_credentials'
+  | 'missing_client_id'
+  | 'missing_client_secret'
+  | 'oauth_client_unavailable';
+
 export interface SessionPayload {
   authenticated: boolean;
   user: SessionUser | null;
   registrationEnabled: boolean;
   googleAuthEnabled: boolean;
+  googleAuthStatus: GoogleAuthStatus;
   csrfToken: string;
 }
 

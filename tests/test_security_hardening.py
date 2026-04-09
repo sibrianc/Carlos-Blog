@@ -80,6 +80,7 @@ def test_api_session_reports_registration_flag_and_csrf(client, app):
     assert payload['authenticated'] is False
     assert payload['registrationEnabled'] is False
     assert payload['googleAuthEnabled'] is False
+    assert payload['googleAuthStatus'] in {'missing_credentials', 'authlib_missing'}
     assert payload['csrfToken']
 
 
@@ -121,12 +122,36 @@ def test_api_session_reports_google_enabled_when_credentials_are_configured(tmp_
             'GOOGLE_CLIENT_SECRET': 'google-client-secret',
         }
     )
+    app.extensions['google_oauth_client'] = object()
     client = app.test_client()
 
     response = client.get('/api/session')
 
     assert response.status_code == 200
     assert response.get_json()['googleAuthEnabled'] is True
+    assert response.get_json()['googleAuthStatus'] == 'enabled'
+
+
+def test_api_session_reports_missing_google_secret_status(tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, 'OAuth', object())
+    app = create_app(
+        {
+            'TESTING': True,
+            'SECRET_KEY': 'google-missing-secret',
+            'SQLALCHEMY_DATABASE_URI': f"sqlite:///{tmp_path / 'google-missing-secret.db'}",
+            'WTF_CSRF_ENABLED': False,
+            'ADMIN_EMAIL': '',
+            'GOOGLE_CLIENT_ID': 'google-client-id',
+            'GOOGLE_CLIENT_SECRET': '',
+        }
+    )
+    client = app.test_client()
+
+    response = client.get('/api/session')
+
+    assert response.status_code == 200
+    assert response.get_json()['googleAuthEnabled'] is False
+    assert response.get_json()['googleAuthStatus'] == 'missing_client_secret'
 
 
 def test_contact_route_returns_provider_unavailable_when_not_configured(client):

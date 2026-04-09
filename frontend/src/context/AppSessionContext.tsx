@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { ApiError, api } from '../lib/api';
-import type { SessionPayload, SessionUser } from '../types';
+import type { GoogleAuthStatus, SessionPayload, SessionUser } from '../types';
 
 interface SessionContextValue {
   loading: boolean;
@@ -8,6 +8,7 @@ interface SessionContextValue {
   authenticated: boolean;
   registrationEnabled: boolean;
   googleAuthEnabled: boolean;
+  googleAuthStatus: GoogleAuthStatus;
   csrfToken: string;
   error: string;
   refreshSession: () => Promise<void>;
@@ -23,6 +24,7 @@ const defaultSession: SessionPayload = {
   user: null,
   registrationEnabled: false,
   googleAuthEnabled: false,
+  googleAuthStatus: 'missing_credentials',
   csrfToken: '',
 };
 
@@ -89,6 +91,7 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
         authenticated: session.authenticated,
         registrationEnabled: session.registrationEnabled,
         googleAuthEnabled: session.googleAuthEnabled,
+        googleAuthStatus: session.googleAuthStatus,
         csrfToken: session.csrfToken,
         error,
         refreshSession,

@@ -3,6 +3,14 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { getApiErrorMessage, useAppSession } from '../context/AppSessionContext';
 
+const googleStatusMessages: Record<string, string> = {
+  authlib_missing: 'Google sign-in package is unavailable on this deployment. Render is not loading Authlib correctly.',
+  missing_credentials: 'Google sign-in is not active on this deployment yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Render, then redeploy.',
+  missing_client_id: 'Google sign-in is missing GOOGLE_CLIENT_ID in Render.',
+  missing_client_secret: 'Google sign-in is missing GOOGLE_CLIENT_SECRET in Render.',
+  oauth_client_unavailable: 'Google sign-in credentials exist but the OAuth client did not initialize. A fresh deploy usually fixes this.',
+};
+
 const oauthErrors: Record<string, string> = {
   google_failed: 'Google sign-in failed. Please try again.',
   google_registration_closed: 'Google sign-in is limited to existing accounts while public registration is disabled.',
@@ -13,7 +21,7 @@ const oauthErrors: Record<string, string> = {
 export function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { authenticated, googleAuthEnabled, loading, login, registrationEnabled } = useAppSession();
+  const { authenticated, googleAuthEnabled, googleAuthStatus, loading, login, registrationEnabled } = useAppSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -77,7 +85,7 @@ export function Login() {
             Continue with Google
           </a>
         ) : (
-          <p className="text-center font-body text-xs text-on-surface-variant">Google sign-in is not active on this deployment yet. Confirm <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and redeploy on Render.</p>
+          <p className="text-center font-body text-xs text-on-surface-variant">{googleStatusMessages[googleAuthStatus] || 'Google sign-in is not active on this deployment yet.'}</p>
         )}
         {registrationEnabled && <p className="text-center font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant"><Link to="/register" className="hover:text-primary transition-colors">Open the registration page</Link></p>}
       </motion.form>

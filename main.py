@@ -49,10 +49,13 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from forms import ActionForm, CommentForm, ContactForm, CreatePostForm, LoginForm, RegisterForm
 
+AUTHLIB_IMPORT_ERROR = None
+
 try:
     from authlib.integrations.flask_client import OAuth
-except ImportError:  # pragma: no cover - Authlib is optional until Google OAuth is configured.
+except ImportError as exc:  # pragma: no cover - Authlib is optional until Google OAuth is configured.
     OAuth = None
+    AUTHLIB_IMPORT_ERROR = str(exc)
 
 try:
     import bleach
@@ -656,12 +659,25 @@ def resolve_google_user_claims(userinfo):
     return new_user
 
 
+def google_oauth_status():
+    client_id = (current_app.config.get("GOOGLE_CLIENT_ID") or "").strip()
+    client_secret = (current_app.config.get("GOOGLE_CLIENT_SECRET") or "").strip()
+
+    if OAuth is None:
+        return "authlib_missing"
+    if not client_id and not client_secret:
+        return "missing_credentials"
+    if not client_id:
+        return "missing_client_id"
+    if not client_secret:
+        return "missing_client_secret"
+    if current_app.extensions.get("google_oauth_client") is None:
+        return "oauth_client_unavailable"
+    return "enabled"
+
+
 def google_oauth_enabled():
-    return bool(
-        OAuth is not None
-        and (current_app.config.get("GOOGLE_CLIENT_ID") or "").strip()
-        and (current_app.config.get("GOOGLE_CLIENT_SECRET") or "").strip()
-    )
+    return google_oauth_status() == "enabled"
 
 
 def consume_post_login_redirect(default_endpoint="get_all_posts"):
@@ -958,11 +974,13 @@ def serialize_post_detail(post):
 
 
 def build_session_payload():
+    google_status = google_oauth_status()
     return {
         "authenticated": bool(current_user.is_authenticated),
         "user": serialize_current_user(current_user if current_user.is_authenticated else None),
         "registrationEnabled": is_registration_enabled(),
-        "googleAuthEnabled": google_oauth_enabled(),
+        "googleAuthEnabled": google_status == "enabled",
+        "googleAuthStatus": google_status,
         "csrfToken": generate_csrf(),
     }
 
