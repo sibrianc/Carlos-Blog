@@ -7,8 +7,8 @@ export function Hero() {
   return (
     <section className="min-h-[85vh] flex flex-col items-center justify-center relative px-8">
       <div className="absolute inset-0 z-0 opacity-20 pointer-events-none overflow-hidden">
-        <motion.div animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }} transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }} className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary rounded-full blur-[160px]" />
-        <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0.7, 0.4] }} transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut', delay: 1 }} className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary rounded-full blur-[160px]" />
+        <motion.div animate={{ scale: [1, 1.15, 1], opacity: [0.2, 0.4, 0.2] }} transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }} className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary rounded-full blur-[200px]" />
+        <motion.div animate={{ scale: [1, 1.2, 1], opacity: [0.15, 0.35, 0.15] }} transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut', delay: 1 }} className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary rounded-full blur-[200px]" />
       </div>
 
       <div className="relative z-10 max-w-4xl text-center space-y-8">

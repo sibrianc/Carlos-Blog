@@ -1,0 +1,74 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ "Edit Project" if project else "New Project" }} - The Living Codex Admin{% endblock %}
+
+{% block content %}
+<section class="admin-panel p-4">
+  <div class="mb-4">
+    <h1 class="h3 mb-1">{{ "Edit Project" if project else "New Project" }}</h1>
+    <p class="text-secondary mb-0">Public portfolio content and metadata.</p>
+  </div>
+
+  <form method="post" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <h2 class="h5 mb-3">English Content</h2>
+        {% for field in [form.title, form.tagline, form.summary, form.problem, form.outcome] %}
+          <div class="mb-3">
+            {{ field.label(class="form-label") }}
+            {{ field(class="form-control") }}
+            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        <div class="mb-3">
+          {{ form.description.label(class="form-label") }}
+          {{ form.description(class="form-control", rows="7") }}
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <h2 class="h5 mb-3">Spanish Content</h2>
+        {% for field in [form.title_es, form.tagline_es, form.summary_es, form.problem_es, form.outcome_es] %}
+          <div class="mb-3">
+            {{ field.label(class="form-label") }}
+            {{ field(class="form-control") }}
+            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        <div class="mb-3">
+          {{ form.description_es.label(class="form-label") }}
+          {{ form.description_es(class="form-control", rows="7") }}
+        </div>
+      </div>
+
+      <div class="col-12">
+        <h2 class="h5 mb-3">Project Metadata</h2>
+        <div class="row g-3">
+          <div class="col-md-4">{{ form.slug.label(class="form-label") }} {{ form.slug(class="form-control") }}</div>
+          <div class="col-md-4">{{ form.role_label.label(class="form-label") }} {{ form.role_label(class="form-control") }}</div>
+          <div class="col-md-2">{{ form.project_year.label(class="form-label") }} {{ form.project_year(class="form-control") }}</div>
+          <div class="col-md-2">{{ form.display_order.label(class="form-label") }} {{ form.display_order(class="form-control") }}</div>
+          <div class="col-md-4">{{ form.status.label(class="form-label") }} {{ form.status(class="form-select") }}</div>
+          <div class="col-md-8">{{ form.tech_stack.label(class="form-label") }} {{ form.tech_stack(class="form-control", placeholder="Python, Flask, React") }}</div>
+          <div class="col-md-6">{{ form.repo_url.label(class="form-label") }} {{ form.repo_url(class="form-control") }}</div>
+          <div class="col-md-6">{{ form.live_url.label(class="form-label") }} {{ form.live_url(class="form-control") }}</div>
+          <div class="col-md-6">{{ form.cover_image.label(class="form-label") }} {{ form.cover_image(class="form-control") }}</div>
+          <div class="col-md-6">{{ form.video_url.label(class="form-label") }} {{ form.video_url(class="form-control") }}</div>
+          <div class="col-12">
+            <div class="form-check form-switch">
+              {{ form.is_featured(class="form-check-input", id="is_featured") }}
+              <label class="form-check-label" for="is_featured">{{ form.is_featured.label.text }}</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mt-4">
+      <button type="submit" class="btn btn-codex">{{ "Update Project" if project else "Create Project" }}</button>
+      <a href="{{ url_for('admin_projects') }}" class="btn btn-outline-light">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

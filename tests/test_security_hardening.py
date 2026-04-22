@@ -6,7 +6,7 @@ from sqlalchemy import text
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import main as main_module
-from main import BlogPost, Comment, User, create_app, create_post_comment, db
+from main import BlogPost, Comment, ContactMessage, Project, User, create_app, create_post_comment, db
 
 
 def create_user(email, password, *, name='User'):
@@ -68,6 +68,7 @@ def test_frontend_shell_is_served_for_primary_routes(client, app):
     assert_spa_shell(client.get('/login'))
     assert_spa_shell(client.get('/register'))
     assert_spa_shell(client.get('/contact'))
+    assert_spa_shell(client.get('/projects'))
 
 
 def test_api_session_reports_registration_flag_and_csrf(client, app):
@@ -160,13 +161,15 @@ def test_contact_route_returns_provider_unavailable_when_not_configured(client):
         {
             'name': 'Reader',
             'email': 'reader@example.com',
-            'phone': '+1 555 867 5309',
             'message': 'Hello from the redesigned contact form.',
         },
     )
 
     assert response.status_code == 503
     assert response.get_json()['error'] == 'Contact delivery is not configured right now.'
+    with client.application.app_context():
+        saved = db.session.execute(db.select(ContactMessage)).scalar_one()
+        assert saved.email == 'reader@example.com'
 
 
 def test_contact_route_validates_fields(client):
@@ -175,7 +178,6 @@ def test_contact_route_validates_fields(client):
         {
             'name': 'A',
             'email': 'invalid-email',
-            'phone': 'abc',
             'message': 'short',
         },
     )
@@ -185,7 +187,6 @@ def test_contact_route_validates_fields(client):
     assert payload['error'] == 'Please correct the contact form and try again.'
     assert 'name' in payload['fieldErrors']
     assert 'email' in payload['fieldErrors']
-    assert 'phone' in payload['fieldErrors']
     assert 'message' in payload['fieldErrors']
 
 
@@ -197,8 +198,8 @@ def test_contact_route_sends_message_when_delivery_is_available(client, app, mon
     )
     delivered = {}
 
-    def fake_send_contact_email(name, email, phone, message):
-        delivered.update({'name': name, 'email': email, 'phone': phone, 'message': message})
+    def fake_send_contact_email(name, email, message):
+        delivered.update({'name': name, 'email': email, 'message': message})
 
     monkeypatch.setattr(main_module, 'send_contact_email', fake_send_contact_email)
 
@@ -207,7 +208,6 @@ def test_contact_route_sends_message_when_delivery_is_available(client, app, mon
         {
             'name': 'Reader',
             'email': 'reader@example.com',
-            'phone': '+1 555 867 5309',
             'message': 'Hello from the redesigned contact form.',
         },
     )
@@ -217,9 +217,12 @@ def test_contact_route_sends_message_when_delivery_is_available(client, app, mon
     assert delivered == {
         'name': 'Reader',
         'email': 'reader@example.com',
-        'phone': '+1 555 867 5309',
         'message': 'Hello from the redesigned contact form.',
     }
+    with app.app_context():
+        saved = db.session.execute(db.select(ContactMessage)).scalar_one()
+        assert saved.name == 'Reader'
+        assert saved.processed is False
 
 
 def test_contact_rate_limit_applies(client, app, monkeypatch):
@@ -234,7 +237,6 @@ def test_contact_rate_limit_applies(client, app, monkeypatch):
     payload = {
         'name': 'Reader',
         'email': 'reader@example.com',
-        'phone': '+1 555 867 5309',
         'message': 'Hello from the redesigned contact form.',
     }
 
@@ -244,6 +246,103 @@ def test_contact_rate_limit_applies(client, app, monkeypatch):
     assert first_response.status_code == 200
     assert second_response.status_code == 429
     assert second_response.get_json()['error'] == 'Too many attempts. Please wait a few minutes before trying again.'
+
+
+def test_projects_api_lists_and_returns_detail(client, app):
+    with app.app_context():
+        db.session.add(
+            Project(
+                title='Signal Atlas',
+                slug='signal-atlas',
+                summary='A project summary.',
+                tagline='Mapping the work.',
+                tech_stack='Python, Flask, React',
+                project_year=2026,
+                status='live',
+                display_order=1,
+                is_featured=True,
+            )
+        )
+        db.session.commit()
+
+    list_response = client.get('/api/projects')
+    detail_response = client.get('/api/projects/signal-atlas')
+    shell_response = client.get('/projects/signal-atlas')
+
+    assert list_response.status_code == 200
+    assert list_response.get_json()['projects'][0]['slug'] == 'signal-atlas'
+    assert detail_response.status_code == 200
+    assert detail_response.get_json()['project']['techStack'] == ['Python', 'Flask', 'React']
+    assert_spa_shell(shell_response)
+
+
+def test_admin_project_routes_require_admin(client):
+    response = client.get('/admin/projects')
+
+    assert response.status_code == 302
+    assert '/login' in response.headers['Location']
+
+
+def test_admin_can_create_project_and_manage_messages(client, app, monkeypatch):
+    app.config.update(
+        RESEND_API_KEY='test-resend-key',
+        CONTACT_FROM_EMAIL='codex@example.com',
+        CONTACT_RECIPIENT_EMAIL='owner@example.com',
+    )
+    monkeypatch.setattr(main_module, 'send_contact_email', lambda *args, **kwargs: None)
+
+    with app.app_context():
+        create_user('admin@example.com', 'long-password-123', name='Admin')
+
+    api_login(client, 'admin@example.com', 'long-password-123')
+
+    project_response = client.post(
+        '/admin/projects/new',
+        data={
+            'title': 'Admin Project',
+            'slug': 'admin-project',
+            'tagline': 'Admin managed.',
+            'summary': 'Created from the merged admin.',
+            'problem': '',
+            'outcome': '',
+            'description': '',
+            'title_es': '',
+            'tagline_es': '',
+            'summary_es': '',
+            'problem_es': '',
+            'outcome_es': '',
+            'description_es': '',
+            'role_label': 'Developer',
+            'project_year': '2026',
+            'status': 'live',
+            'display_order': '2',
+            'tech_stack': 'Flask, React',
+            'repo_url': '',
+            'live_url': '',
+            'cover_image': '',
+            'video_url': '',
+            'is_featured': 'y',
+        },
+        follow_redirects=False,
+    )
+    contact_response = api_contact(
+        client,
+        {
+            'name': 'Reader',
+            'email': 'reader@example.com',
+            'message': 'Hello from the merged contact form.',
+        },
+    )
+    messages_response = client.get('/admin/messages')
+
+    assert project_response.status_code == 302
+    assert contact_response.status_code == 200
+    assert messages_response.status_code == 200
+    with app.app_context():
+        project = db.session.execute(db.select(Project).where(Project.slug == 'admin-project')).scalar_one()
+        message = db.session.execute(db.select(ContactMessage)).scalar_one()
+        assert project.is_featured is True
+        assert message.processed is False
 
 
 def test_first_registered_user_is_not_admin(client, app):

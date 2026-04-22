@@ -40,14 +40,14 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import generate_csrf
 from markupsafe import Markup, escape
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func, inspect, select, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, inspect, select, text
 from sqlalchemy.exc import IntegrityError, NoSuchTableError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from werkzeug.datastructures import MultiDict
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from forms import ActionForm, CommentForm, ContactForm, CreatePostForm, LoginForm, RegisterForm
+from forms import ActionForm, CommentForm, ContactForm, CreatePostForm, LoginForm, ProjectForm, RegisterForm
 
 AUTHLIB_IMPORT_ERROR = None
 
@@ -243,6 +243,57 @@ class BlogPost(db.Model):
     )
 
 
+class Project(db.Model):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    slug: Mapped[str] = mapped_column(String(140), unique=True, nullable=False, index=True)
+    summary: Mapped[str] = mapped_column(String(280), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    tagline: Mapped[str] = mapped_column(String(160), default="")
+    problem: Mapped[str] = mapped_column(String(280), default="")
+    outcome: Mapped[str] = mapped_column(String(280), default="")
+    title_es: Mapped[str] = mapped_column(String(120), default="")
+    summary_es: Mapped[str] = mapped_column(String(280), default="")
+    description_es: Mapped[str] = mapped_column(Text, default="")
+    tagline_es: Mapped[str] = mapped_column(String(160), default="")
+    problem_es: Mapped[str] = mapped_column(String(280), default="")
+    outcome_es: Mapped[str] = mapped_column(String(280), default="")
+    role_label: Mapped[str] = mapped_column(String(120), default="")
+    project_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="live", index=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    tech_stack: Mapped[str] = mapped_column(String(240), default="")
+    repo_url: Mapped[str] = mapped_column(String(240), default="")
+    live_url: Mapped[str] = mapped_column(String(240), default="")
+    cover_image: Mapped[str] = mapped_column(String(500), default="")
+    video_url: Mapped[str] = mapped_column(String(500), default="")
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class ContactMessage(db.Model):
+    __tablename__ = "contact_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(250), nullable=False)
+    email: Mapped[str] = mapped_column(String(250), nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    processed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 class User(UserMixin, db.Model):
     __tablename__ = "users"
 
@@ -420,7 +471,7 @@ def render_comment_html(value):
     return Markup(sanitize_html(value, COMMENT_ALLOWED_TAGS))
 
 
-def send_contact_email(name, email, phone, message):
+def send_contact_email(name, email, message):
     resend_api_key = (current_app.config.get("RESEND_API_KEY") or "").strip()
     from_email = (current_app.config.get("CONTACT_FROM_EMAIL") or "").strip()
     recipient_email = (current_app.config.get("CONTACT_RECIPIENT_EMAIL") or "").strip()
@@ -430,7 +481,6 @@ def send_contact_email(name, email, phone, message):
 
     safe_name = escape(name)
     safe_email = escape(email)
-    safe_phone = escape(phone)
     safe_message = escape(message).replace("\n", "<br>")
     subject = f"New contact form message from {name}"
     payload = json.dumps(
@@ -444,14 +494,12 @@ def send_contact_email(name, email, phone, message):
                 "<h2 style=\"margin-top:0;color:#71d7cd;\">New message from The Living Codex</h2>"
                 f"<p><strong>Name:</strong> {safe_name}</p>"
                 f"<p><strong>Email:</strong> {safe_email}</p>"
-                f"<p><strong>Phone:</strong> {safe_phone}</p>"
                 f"<p><strong>Message:</strong><br>{safe_message}</p>"
                 "</div>"
             ),
             "text": (
                 f"Name: {name}\n"
-                f"Email: {email}\n"
-                f"Phone: {phone}\n\n"
+                f"Email: {email}\n\n"
                 f"Message:\n{message}"
             ),
         }
@@ -820,6 +868,123 @@ def register_cli_commands(app):
             "ADMIN_EMAIL still grants admin access until that migration is applied."
         )
 
+    @app.cli.command("seed-projects")
+    @click.option("--force", is_flag=True, default=False, help="Re-seed even if projects already exist.")
+    def seed_projects_cmd(force):
+        """Seed the database with sample portfolio projects from Carlos Dev."""
+        existing = db.session.execute(select(func.count()).select_from(Project)).scalar() or 0
+        if existing > 0 and not force:
+            click.echo(f"Database already has {existing} project(s). Use --force to re-seed.")
+            return
+
+        sample_projects = [
+            {
+                "title": "Neon Genesis Interface",
+                "slug": "neon-genesis",
+                "tagline": "A futuristic dashboard with real-time data visualization.",
+                "summary": "An experimental dashboard focusing on glassmorphism and real-time data streams.",
+                "description": "WebSockets for live updates. Three.js background animations. Custom neon UI components built with React and a Node.js backend.",
+                "problem": "Teams needed a unified real-time view of distributed system metrics without constant page refreshes.",
+                "outcome": "Reduced incident response time by 40% through live alerting and interactive data drill-downs.",
+                "tech_stack": "React,Three.js,WebSocket,Node.js",
+                "repo_url": "https://github.com/sibrianc/neon-genesis",
+                "live_url": "https://neon-genesis.demo.com",
+                "cover_image": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=800&q=80",
+                "is_featured": True,
+                "status": "live",
+                "display_order": 1,
+                "project_year": 2024,
+                "role_label": "Lead Frontend Engineer",
+            },
+            {
+                "title": "CyberSec Vault",
+                "slug": "cybersec-vault",
+                "tagline": "Encrypted file storage with zero-knowledge architecture.",
+                "summary": "Secure storage application built with privacy solely in mind.",
+                "description": "Implements client-side encryption using AES-256 before data ever leaves the browser. Flask API handles metadata only; the server never sees plaintext content.",
+                "problem": "Users needed a cloud-hosted file store where even the server operator could not read their data.",
+                "outcome": "Zero-knowledge guarantee verified by independent security audit; successfully onboarded 200+ beta users.",
+                "tech_stack": "Python,Flask,Cryptography,SQLCipher",
+                "repo_url": "https://github.com/sibrianc/cybersec-vault",
+                "live_url": "",
+                "cover_image": "https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?auto=format&fit=crop&w=800&q=80",
+                "is_featured": True,
+                "status": "beta",
+                "display_order": 2,
+                "project_year": 2024,
+                "role_label": "Full Stack Engineer",
+            },
+            {
+                "title": "Neural Net Visualizer",
+                "slug": "neural-net-viz",
+                "tagline": "Interactive playground for understanding deep learning models.",
+                "summary": "A web-based tool to visualize how neural networks learn.",
+                "description": "Users can adjust hyperparameters and see the decision boundary evolve in real-time. Supports classification, regression, and custom architectures.",
+                "problem": "ML students lacked an intuitive way to observe gradient descent and loss convergence in the browser.",
+                "outcome": "Used by 3 university courses as a supplementary teaching tool; 1,200+ active monthly users.",
+                "tech_stack": "TypeScript,D3.js,TensorFlow.js",
+                "repo_url": "https://github.com/sibrianc/neural-viz",
+                "live_url": "https://neural-viz.io",
+                "cover_image": "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?auto=format&fit=crop&w=800&q=80",
+                "is_featured": False,
+                "status": "live",
+                "display_order": 3,
+                "project_year": 2023,
+                "role_label": "Solo Developer",
+            },
+            {
+                "title": "Ghost Shell CLI",
+                "slug": "ghost-shell",
+                "tagline": "A terminal emulator for the web inspired by Ghost in the Shell.",
+                "summary": "Fully functional terminal emulator that runs in the browser.",
+                "description": "Supports custom commands, file system navigation emulation, and 'hacking' minigames. Built with XTerm.js and a WebAssembly core for performance.",
+                "problem": "Developers wanted a shareable, sandboxed terminal environment without spinning up a cloud VM.",
+                "outcome": "Deployed as an interactive portfolio centrepiece; 500+ GitHub stars in the first month.",
+                "tech_stack": "Vue.js,XTerm.js,WebAssembly",
+                "repo_url": "https://github.com/sibrianc/ghost-shell",
+                "live_url": "https://ghost-shell.net",
+                "cover_image": "https://images.unsplash.com/photo-1614064641938-3bbee52942c7?auto=format&fit=crop&w=800&q=80",
+                "is_featured": True,
+                "status": "live",
+                "display_order": 4,
+                "project_year": 2023,
+                "role_label": "Full Stack Engineer",
+            },
+            {
+                "title": "The Living Codex",
+                "slug": "the-living-codex",
+                "tagline": "This blog — a lore-forward publishing platform with portfolio integration.",
+                "summary": "Flask + React full-stack blog with a dark fantasy aesthetic, Google OAuth, and a merged portfolio showcase.",
+                "description": "Custom admin panel, Tiptap rich-text editor, image uploads via Cloudinary, Google OAuth2 login, Resend email delivery, and a fully animated portfolio frontend ported from Carlos Dev.",
+                "problem": "Needed a single deployable application that serves both as a personal blog and a professional portfolio without splitting domains.",
+                "outcome": "Single-repo, single-deploy architecture serving both personas under one URL. Canvas scenes, character animations, and admin tooling all ship together.",
+                "tech_stack": "Python,Flask,React,PostgreSQL,Docker",
+                "repo_url": "https://github.com/sibrianc/personal-blog",
+                "live_url": "",
+                "cover_image": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80",
+                "is_featured": True,
+                "status": "live",
+                "display_order": 0,
+                "project_year": 2025,
+                "role_label": "Full Stack Engineer",
+            },
+        ]
+
+        added = 0
+        for data in sample_projects:
+            slug = data["slug"]
+            existing_p = db.session.execute(select(Project).where(Project.slug == slug)).scalar_one_or_none()
+            if existing_p is not None:
+                click.echo(f"  skip  {slug} (already exists)")
+                continue
+            project = Project(**data)
+            db.session.add(project)
+            added += 1
+            click.echo(f"  add   {slug}")
+
+        db.session.commit()
+        click.echo(f"Done — {added} project(s) added.")
+
     @app.cli.command("reset-password")
     @click.option("--email", required=True, help="Email of the account to update.")
     @click.password_option("--password", confirmation_prompt=True)
@@ -973,6 +1138,39 @@ def serialize_post_detail(post):
     return payload
 
 
+def project_tech_items(project):
+    return [item.strip() for item in (project.tech_stack or "").split(",") if item.strip()]
+
+
+def serialize_project(project):
+    return {
+        "id": str(project.id),
+        "title": project.title,
+        "slug": project.slug,
+        "summary": project.summary or "",
+        "description": project.description or "",
+        "tagline": project.tagline or "",
+        "problem": project.problem or "",
+        "outcome": project.outcome or "",
+        "titleEs": project.title_es or "",
+        "summaryEs": project.summary_es or "",
+        "descriptionEs": project.description_es or "",
+        "taglineEs": project.tagline_es or "",
+        "problemEs": project.problem_es or "",
+        "outcomeEs": project.outcome_es or "",
+        "roleLabel": project.role_label or "",
+        "projectYear": project.project_year,
+        "status": project.status or "live",
+        "displayOrder": project.display_order or 0,
+        "techStack": project_tech_items(project),
+        "repoUrl": project.repo_url or "",
+        "liveUrl": project.live_url or "",
+        "coverImage": project.cover_image or "",
+        "videoUrl": project.video_url or "",
+        "isFeatured": bool(project.is_featured),
+    }
+
+
 def build_session_payload():
     google_status = google_oauth_status()
     return {
@@ -1082,6 +1280,16 @@ def register_routes(app):
     def contact():
         return serve_frontend_index()
 
+    @app.route("/projects")
+    def projects_page():
+        return serve_frontend_index()
+
+    @app.route("/projects/<string:slug>")
+    def project_page(slug):
+        if db.session.execute(select(Project).where(Project.slug == slug)).scalar_one_or_none() is None:
+            abort(404)
+        return serve_frontend_index()
+
     @app.get("/auth/google/start")
     def auth_google_start():
         google_client = current_app.extensions.get("google_oauth_client")
@@ -1142,19 +1350,26 @@ def register_routes(app):
             {
                 "name": payload.get("name"),
                 "email": payload.get("email"),
-                "phone": payload.get("phone"),
                 "message": payload.get("message"),
             },
         )
         if not form.validate():
             return api_error("Please correct the contact form and try again.", 400, form.errors)
 
+        contact_message = ContactMessage(
+            name=form.name.data.strip(),
+            email=normalize_email(form.email.data),
+            message=form.message.data.strip(),
+        )
+        db.session.add(contact_message)
+        if not commit_changes():
+            return api_error("We could not save your message. Please try again.", 500)
+
         try:
             send_contact_email(
-                name=form.name.data.strip(),
-                email=normalize_email(form.email.data),
-                phone=form.phone.data.strip(),
-                message=form.message.data.strip(),
+                name=contact_message.name,
+                email=contact_message.email,
+                message=contact_message.message,
             )
         except ContactDeliveryConfigurationError:
             return api_error("Contact delivery is not configured right now.", 503)
@@ -1165,6 +1380,46 @@ def register_routes(app):
             return api_error("Contact delivery is unavailable right now. Please try again later.", 503)
 
         return jsonify({"sent": True, "message": "Your message has been sent."})
+
+    @app.get("/api/projects")
+    def api_projects():
+        tech = (request.args.get("tech") or "").strip()
+        year = request.args.get("year", type=int)
+        status = (request.args.get("status") or "").strip().lower()
+
+        query = select(Project)
+        if tech:
+            query = query.where(Project.tech_stack.ilike(f"%{tech}%"))
+        if year:
+            query = query.where(Project.project_year == year)
+        if status in {"live", "beta", "archived"}:
+            query = query.where(Project.status == status)
+
+        projects = db.session.execute(
+            query.order_by(Project.display_order.asc(), Project.created_at.desc())
+        ).scalars().all()
+        year_rows = db.session.execute(
+            select(Project.project_year)
+            .where(Project.project_year.is_not(None))
+            .distinct()
+            .order_by(Project.project_year.desc())
+        ).all()
+        available_years = [row[0] for row in year_rows if row[0] is not None]
+
+        return jsonify(
+            {
+                "projects": [serialize_project(project) for project in projects],
+                "availableYears": available_years,
+                "statusOptions": ["live", "beta", "archived"],
+            }
+        )
+
+    @app.get("/api/projects/<string:slug>")
+    def api_project_detail(slug):
+        project = db.session.execute(select(Project).where(Project.slug == slug)).scalar_one_or_none()
+        if project is None:
+            return api_error("Project not found.", 404)
+        return jsonify({"project": serialize_project(project)})
 
     @app.post("/api/auth/register")
     def api_register():
@@ -1367,6 +1622,94 @@ def register_routes(app):
             return api_error("We could not delete that post safely.", 500)
 
         return jsonify({"deleted": True})
+
+    @app.get("/admin")
+    @admin_only
+    def admin_dashboard():
+        return redirect(url_for("admin_projects"))
+
+    @app.get("/admin/projects")
+    @admin_only
+    def admin_projects():
+        projects = db.session.execute(
+            select(Project).order_by(Project.display_order.asc(), Project.created_at.desc())
+        ).scalars().all()
+        return render_template("admin/projects.html", projects=projects)
+
+    @app.route("/admin/projects/new", methods=["GET", "POST"])
+    @admin_only
+    def admin_project_new():
+        form = ProjectForm()
+        if form.validate_on_submit():
+            project = Project()
+            form.populate_obj(project)
+            project.slug = project.slug.strip().lower()
+            project.display_order = project.display_order or 0
+            db.session.add(project)
+            if commit_changes():
+                flash("Project created.", "success")
+                return redirect(url_for("admin_projects"))
+            flash("The project title or slug is already in use.", "danger")
+        return render_template("admin/project_form.html", form=form, project=None)
+
+    @app.route("/admin/projects/<int:project_id>/edit", methods=["GET", "POST"])
+    @admin_only
+    def admin_project_edit(project_id):
+        project = db.get_or_404(Project, project_id)
+        form = ProjectForm(obj=project)
+        if form.validate_on_submit():
+            form.populate_obj(project)
+            project.slug = project.slug.strip().lower()
+            project.display_order = project.display_order or 0
+            if commit_changes():
+                flash("Project updated.", "success")
+                return redirect(url_for("admin_projects"))
+            flash("The project title or slug is already in use.", "danger")
+        return render_template("admin/project_form.html", form=form, project=project)
+
+    @app.post("/admin/projects/<int:project_id>/delete")
+    @admin_only
+    def admin_project_delete(project_id):
+        form = ActionForm()
+        if not form.validate_on_submit():
+            abort(400)
+        project = db.get_or_404(Project, project_id)
+        db.session.delete(project)
+        db.session.commit()
+        flash("Project deleted.", "info")
+        return redirect(url_for("admin_projects"))
+
+    @app.get("/admin/messages")
+    @admin_only
+    def admin_messages():
+        messages = db.session.execute(
+            select(ContactMessage).order_by(ContactMessage.processed.asc(), ContactMessage.created_at.desc())
+        ).scalars().all()
+        return render_template("admin/messages.html", messages=messages)
+
+    @app.post("/admin/messages/<int:message_id>/toggle")
+    @admin_only
+    def admin_message_toggle(message_id):
+        form = ActionForm()
+        if not form.validate_on_submit():
+            abort(400)
+        message = db.get_or_404(ContactMessage, message_id)
+        message.processed = not message.processed
+        db.session.commit()
+        flash("Message status updated.", "info")
+        return redirect(url_for("admin_messages"))
+
+    @app.post("/admin/messages/<int:message_id>/delete")
+    @admin_only
+    def admin_message_delete(message_id):
+        form = ActionForm()
+        if not form.validate_on_submit():
+            abort(400)
+        message = db.get_or_404(ContactMessage, message_id)
+        db.session.delete(message)
+        db.session.commit()
+        flash("Message deleted.", "info")
+        return redirect(url_for("admin_messages"))
 
     @app.route("/register", methods=["GET", "POST"])
     def register():

@@ -42,7 +42,7 @@ export function Timeline() {
             transition={{ duration: 0.6, delay: index * 0.2 }}
             className="relative pl-10 md:pl-16"
           >
-            <div className="absolute -left-6 top-0 w-12 h-12 bg-background border border-primary rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(113,215,205,0.3)]">
+            <div className="absolute -left-6 top-0 w-12 h-12 bg-background border border-primary rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(216,196,145,0.3)]">
               <span className="material-symbols-outlined text-primary">{event.icon}</span>
             </div>
             

@@ -60,7 +60,6 @@ export interface ChroniclePayload {
 export interface ContactPayload {
   name: string;
   email: string;
-  phone: string;
   message: string;
 }
 
@@ -72,4 +71,31 @@ export interface ContactResponse {
 export interface ApiErrorResponse {
   error: string;
   fieldErrors?: Record<string, string[]>;
+}
+
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  slug: string;
+  summary: string;
+  description: string;
+  tagline: string;
+  problem: string;
+  outcome: string;
+  titleEs: string;
+  summaryEs: string;
+  descriptionEs: string;
+  taglineEs: string;
+  problemEs: string;
+  outcomeEs: string;
+  roleLabel: string;
+  projectYear: number | null;
+  status: 'live' | 'beta' | 'archived';
+  displayOrder: number;
+  techStack: string[];
+  repoUrl: string;
+  liveUrl: string;
+  coverImage: string;
+  videoUrl: string;
+  isFeatured: boolean;
 }

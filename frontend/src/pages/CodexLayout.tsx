@@ -63,7 +63,7 @@ export function CodexLayout() {
         <button
           type="button"
           onClick={() => setIsOpen((current) => !current)}
-          className="w-full flex items-center justify-between gap-6 px-6 py-4 border border-primary/20 bg-surface-container-low/60 backdrop-blur-md rounded-sm text-left shadow-[0_0_24px_rgba(113,215,205,0.06)] hover:border-primary/35 transition-all duration-300"
+          className="w-full flex items-center justify-between gap-6 px-6 py-4 border border-primary/20 bg-surface-container-low/60 backdrop-blur-md rounded-sm text-left shadow-[0_0_24px_rgba(216,196,145,0.06)] hover:border-primary/35 transition-all duration-300"
           aria-expanded={isOpen}
           aria-haspopup="listbox"
         >
@@ -77,7 +77,7 @@ export function CodexLayout() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute left-0 right-0 mt-3 p-3 border border-primary/15 bg-background/95 backdrop-blur-xl rounded-sm shadow-[0_0_36px_rgba(113,215,205,0.08)] z-20"
+              className="absolute left-0 right-0 mt-3 p-3 border border-primary/15 bg-background/95 backdrop-blur-xl rounded-sm shadow-[0_0_36px_rgba(216,196,145,0.08)] z-20"
               role="listbox"
             >
               <div className="flex flex-col gap-2">
@@ -91,7 +91,7 @@ export function CodexLayout() {
                         navigate(link.to);
                         setIsOpen(false);
                       }}
-                      className={`w-full text-left px-4 py-3 rounded-sm transition-all duration-300 font-label text-xs tracking-[0.08em] ${isActive ? 'text-primary bg-primary/10 border border-primary/20 drop-shadow-[0_0_5px_rgba(113,215,205,0.5)]' : 'text-on-surface-variant hover:text-primary hover:bg-primary/5'}`}
+                      className={`w-full text-left px-4 py-3 rounded-sm transition-all duration-300 font-label text-xs tracking-[0.08em] ${isActive ? 'text-primary bg-primary/10 border border-primary/20 drop-shadow-[0_0_5px_rgba(216,196,145,0.5)]' : 'text-on-surface-variant hover:text-primary hover:bg-primary/5'}`}
                     >
                       {link.label}
                     </button>

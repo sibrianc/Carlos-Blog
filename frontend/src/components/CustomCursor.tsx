@@ -49,7 +49,7 @@ export function CustomCursor() {
           translateX: '-50%',
           translateY: '-50%',
           scale: isHovering ? 0.5 : 1,
-          boxShadow: '0 0 10px 2px rgba(113, 215, 205, 0.8)',
+          boxShadow: '0 0 10px 2px rgba(216, 196, 145, 0.8)',
         }}
       />
       <motion.div
@@ -60,7 +60,7 @@ export function CustomCursor() {
           translateX: '-50%',
           translateY: '-50%',
           scale: isHovering ? 1.5 : 1,
-          backgroundColor: isHovering ? 'rgba(113, 215, 205, 0.1)' : 'transparent',
+          backgroundColor: isHovering ? 'rgba(216, 196, 145, 0.1)' : 'transparent',
         }}
       />
     </>

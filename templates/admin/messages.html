@@ -1,0 +1,50 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Messages - The Living Codex Admin{% endblock %}
+
+{% block content %}
+<section class="admin-panel p-4">
+  <div class="mb-4">
+    <h1 class="h3 mb-1">Contact Messages</h1>
+    <p class="text-secondary mb-0">Messages submitted from the Carlos Dev contact route.</p>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Message</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for message in messages %}
+          <tr>
+            <td>{{ message.name }}</td>
+            <td><a href="mailto:{{ message.email }}">{{ message.email }}</a></td>
+            <td style="max-width: 420px;">{{ message.message }}</td>
+            <td>{{ "Processed" if message.processed else "New" }}</td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('admin_message_toggle', message_id=message.id) }}" class="d-inline">
+                {{ action_form.hidden_tag() }}
+                <button type="submit" class="btn btn-sm btn-codex">{{ "Mark New" if message.processed else "Mark Processed" }}</button>
+              </form>
+              <form method="post" action="{{ url_for('admin_message_delete', message_id=message.id) }}" class="d-inline" onsubmit="return confirm('Delete this message?');">
+                {{ action_form.hidden_tag() }}
+                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-secondary py-5">No messages yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

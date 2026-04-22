@@ -5,6 +5,7 @@ import type {
   ChronicleSummary,
   ContactPayload,
   ContactResponse,
+  ProjectSummary,
   SessionPayload,
 } from '../types';
 
@@ -101,6 +102,17 @@ export const api = {
   logout: (csrfToken: string) => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }, csrfToken),
   fetchChronicles: () => request<{ chronicles: ChronicleSummary[] }>('/api/chronicles'),
   fetchChronicle: (id: string) => request<{ chronicle: ChronicleDetail }>(`/api/chronicles/${id}`),
+  fetchProjects: (filters: { tech?: string; year?: string; status?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.tech) params.set('tech', filters.tech);
+    if (filters.year) params.set('year', filters.year);
+    if (filters.status) params.set('status', filters.status);
+    const query = params.toString();
+    return request<{ projects: ProjectSummary[]; availableYears: number[]; statusOptions: string[] }>(
+      `/api/projects${query ? `?${query}` : ''}`,
+    );
+  },
+  fetchProject: (slug: string) => request<{ project: ProjectSummary }>(`/api/projects/${slug}`),
   sendContact: (payload: ContactPayload, csrfToken: string) =>
     request<ContactResponse>(
       '/api/contact',

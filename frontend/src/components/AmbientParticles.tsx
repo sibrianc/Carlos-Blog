@@ -35,8 +35,8 @@ export function AmbientParticles() {
         this.speedY = (Math.random() - 0.5) * 0.3 - 0.2; // Slight upward drift
         this.opacity = Math.random() * 0.5 + 0.1;
         
-        // Mix of primary (#71d7cd) and secondary (#e1c198) colors
-        const colors = ['113, 215, 205', '225, 193, 152'];
+        // Mix of primary (#d8c491) and secondary (#e1c198) colors
+        const colors = ['216, 196, 145', '225, 193, 152'];
         this.color = colors[Math.floor(Math.random() * colors.length)];
       }
 

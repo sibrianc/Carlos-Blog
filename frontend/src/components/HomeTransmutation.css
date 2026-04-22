@@ -1,0 +1,160 @@
+.ha-stage {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow: hidden;
+  isolation: isolate;
+  background: #000000;
+}
+
+.ha-stage:not(.is-reduced-motion) {
+  cursor: pointer;
+}
+
+.ha-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.ha-dom {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: clamp(2.5rem, 6vh, 5rem);
+  width: 100%;
+  padding: clamp(5.5rem, 10vh, 8rem) clamp(1.25rem, 5vw, 5rem) clamp(4rem, 8vh, 7rem);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ha-mirror {
+  display: grid;
+  justify-items: center;
+  gap: clamp(1rem, 2.4vh, 1.875rem);
+  width: min(52rem, 100%);
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ha-featured-flow {
+  display: grid;
+  justify-items: center;
+  width: min(64rem, 100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ha-stage.is-revealed {
+  overflow: visible;
+  background: transparent;
+  cursor: auto;
+}
+
+.ha-stage.has-scene-open {
+  background: transparent;
+}
+
+.ha-stage.is-revealed .ha-canvas {
+  visibility: hidden;
+}
+
+.ha-stage.show-hero .ha-mirror {
+  opacity: 1;
+  visibility: visible;
+}
+
+.ha-stage.show-featured .ha-featured-flow {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.ha-stage.is-revealed .ha-dom {
+  pointer-events: auto;
+  user-select: text;
+}
+
+.ha-kicker {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(11px, 1vw, 13px);
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(216, 200, 174, 0.78);
+}
+
+.ha-headline {
+  margin: 0;
+  max-width: 15ch;
+  font-family: 'Newsreader', serif;
+  font-size: clamp(42px, 7vw, 94px);
+  font-weight: 500;
+  line-height: 1.02;
+  color: #f0ebde;
+}
+
+.ha-body {
+  margin: 0;
+  max-width: 44ch;
+  font-family: 'Newsreader', serif;
+  font-size: clamp(17px, 1.8vw, 23px);
+  font-weight: 400;
+  line-height: 1.56;
+  color: rgba(216, 200, 174, 0.84);
+}
+
+.ha-stage.is-reduced-motion {
+  overflow: visible;
+  background: transparent;
+  cursor: auto;
+}
+
+.ha-stage.is-reduced-motion .ha-canvas {
+  display: none !important;
+}
+
+.ha-stage.is-reduced-motion .ha-dom {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.ha-stage.is-reduced-motion .ha-mirror,
+.ha-stage.is-reduced-motion .ha-featured-flow {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+@media (max-width: 720px) {
+  .ha-dom {
+    align-content: start;
+    gap: 2.5rem;
+    padding-top: 5.5rem;
+  }
+
+  .ha-headline {
+    max-width: 12ch;
+  }
+
+  .ha-body {
+    max-width: 30ch;
+  }
+}

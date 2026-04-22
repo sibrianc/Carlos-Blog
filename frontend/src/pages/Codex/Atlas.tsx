@@ -65,7 +65,7 @@ export function Atlas() {
       <div className="relative w-full aspect-[4/3] md:aspect-[16/9] bg-surface-container-lowest border border-primary/20 rounded-sm overflow-hidden flex items-center justify-center">
         {/* Stylized Map Background */}
         <div className="absolute inset-0 opacity-20 pointer-events-none flex items-center justify-center">
-          <svg viewBox="0 0 800 400" className="w-full h-full drop-shadow-[0_0_15px_rgba(113,215,205,0.5)]">
+          <svg viewBox="0 0 800 400" className="w-full h-full drop-shadow-[0_0_15px_rgba(216,196,145,0.5)]">
             <path 
               d="M 100 150 Q 150 100 250 120 T 400 100 T 550 130 T 700 200 Q 750 250 650 300 T 450 350 T 250 320 T 100 250 Z" 
               fill="none" 

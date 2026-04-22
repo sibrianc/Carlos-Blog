@@ -34,9 +34,10 @@ export function Footer() {
         </motion.div>
       </div>
       <nav className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4 font-label text-[10px] uppercase tracking-[0.2em] text-tertiary/50">
-        <Link className="hover:text-primary hover:drop-shadow-[0_0_5px_rgba(113,215,205,0.8)] transition-all duration-300" to="/about">About</Link>
-        <Link className="hover:text-primary hover:drop-shadow-[0_0_5px_rgba(113,215,205,0.8)] transition-all duration-300" to="/contact">Contact</Link>
-        <Link className="hover:text-primary hover:drop-shadow-[0_0_5px_rgba(113,215,205,0.8)] transition-all duration-300" to="/chronicles">The Source</Link>
+        <Link className="hover:text-primary hover:drop-shadow-[0_0_5px_rgba(216,196,145,0.8)] transition-all duration-300" to="/about">About</Link>
+        <Link className="hover:text-primary hover:drop-shadow-[0_0_5px_rgba(216,196,145,0.8)] transition-all duration-300" to="/projects">Projects</Link>
+        <Link className="hover:text-primary hover:drop-shadow-[0_0_5px_rgba(216,196,145,0.8)] transition-all duration-300" to="/contact">Contact</Link>
+        <Link className="hover:text-primary hover:drop-shadow-[0_0_5px_rgba(216,196,145,0.8)] transition-all duration-300" to="/chronicles">The Source</Link>
       </nav>
       <div className="flex items-center justify-center gap-4">
         {socialLinks.map((link) => (
@@ -47,7 +48,7 @@ export function Footer() {
             rel="noreferrer"
             aria-label={link.label}
             whileHover={{ y: -2, scale: 1.04 }}
-            className="w-11 h-11 rounded-full border border-secondary/25 bg-surface-container-low/50 text-secondary flex items-center justify-center shadow-[0_0_18px_rgba(225,193,152,0.08)] hover:text-primary hover:border-primary/40 hover:shadow-[0_0_22px_rgba(113,215,205,0.22)] transition-all duration-300"
+            className="w-11 h-11 rounded-full border border-secondary/25 bg-surface-container-low/50 text-secondary flex items-center justify-center shadow-[0_0_18px_rgba(225,193,152,0.08)] hover:text-primary hover:border-primary/40 hover:shadow-[0_0_22px_rgba(216,196,145,0.22)] transition-all duration-300"
           >
             {link.icon}
           </motion.a>

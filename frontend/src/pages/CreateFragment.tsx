@@ -189,7 +189,7 @@ export function CreateFragment() {
             ) : null}
           </div>
         </div>
-        <button type="submit" disabled={submitting || uploadingImage} className="w-full mt-8 py-4 bg-primary-container/50 hover:bg-primary-container text-primary font-label text-sm uppercase tracking-[0.2em] rounded-md transition-all duration-500 shadow-[inset_0_0_12px_rgba(113,215,205,0.1)] hover:shadow-[inset_0_0_20px_rgba(113,215,205,0.3)] border border-primary/20 disabled:opacity-50 disabled:cursor-not-allowed">{submitting ? (isEditing ? 'Reinscribing...' : 'Inscribing...') : isEditing ? 'Update Fragment' : 'Inscribe Fragment'}</button>
+        <button type="submit" disabled={submitting || uploadingImage} className="w-full mt-8 py-4 bg-primary-container/50 hover:bg-primary-container text-primary font-label text-sm uppercase tracking-[0.2em] rounded-md transition-all duration-500 shadow-[inset_0_0_12px_rgba(216,196,145,0.1)] hover:shadow-[inset_0_0_20px_rgba(216,196,145,0.3)] border border-primary/20 disabled:opacity-50 disabled:cursor-not-allowed">{submitting ? (isEditing ? 'Reinscribing...' : 'Inscribing...') : isEditing ? 'Update Fragment' : 'Inscribe Fragment'}</button>
       </motion.form>
     </div>
   );
